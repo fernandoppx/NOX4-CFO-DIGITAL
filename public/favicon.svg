@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <!-- Definitions & Gradients -->
+  <defs>
+    <linearGradient id="silverGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#C2C9D4" />
+      <stop offset="50%" stop-color="#A5ADB9" />
+      <stop offset="100%" stop-color="#8E97A4" />
+    </linearGradient>
+    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563EB" />
+      <stop offset="100%" stop-color="#0038FF" />
+    </linearGradient>
+    <filter id="subtleShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.15" />
+    </filter>
+  </defs>
+
+  <!-- Eagle Wings & Body -->
+  <g id="eagle-emblem" fill="url(#silverGrad)">
+    <!-- Main Eagle Silhouette with wings and head -->
+    <path d="
+      M 250,55 
+      C 255,54 265,58 275,70 
+      C 285,73 295,80 305,90 
+      C 298,96 288,97 280,95
+      C 282,99 285,105 282,110
+      C 275,115 268,116 260,118
+      L 295,170
+      C 320,150 350,110 400,60
+      C 420,110 425,160 395,215
+      C 375,250 345,280 310,300
+      L 318,335
+      C 350,310 390,270 425,215
+      C 440,265 435,310 400,360
+      C 365,405 320,430 280,445
+      L 272,400
+      C 295,385 325,355 345,315
+      L 250,390
+      L 155,315
+      C 175,355 205,385 228,400
+      L 220,445
+      C 180,430 135,405 100,360
+      C 65,310 60,265 75,215
+      C 110,270 150,310 182,335
+      L 190,300
+      C 155,280 125,250 105,215
+      C 75,160 80,110 100,60
+      C 150,110 180,150 205,170
+      L 240,118
+      C 232,116 225,115 218,110
+      C 215,105 218,99 220,95
+      C 212,97 202,96 195,90
+      C 205,80 215,73 225,70
+      C 235,58 245,54 250,55 Z
+    " />
+
+    <!-- Head Details Eye & Beak refinement -->
+    <circle cx="265" cy="90" r="3.5" fill="#FFFFFF" />
+  </g>
+
+  <!-- Central Star Cutout / Overlay -->
+  <g id="star-emblem">
+    <!-- Star Outer White Border -->
+    <polygon 
+      points="250,135 282,230 380,230 302,288 332,382 250,325 168,382 198,288 120,230 218,230" 
+      fill="#FFFFFF" 
+      stroke="#FFFFFF" 
+      stroke-width="12" 
+      stroke-linejoin="round"
+    />
+    <!-- Star Inner Body -->
+    <polygon 
+      points="250,135 282,230 380,230 302,288 332,382 250,325 168,382 198,288 120,230 218,230" 
+      fill="url(#silverGrad)" 
+    />
+  </g>
+</svg>

@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="100%" height="100%">
+  <defs>
+    <linearGradient id="noxSilver" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#C2C9D4" />
+      <stop offset="60%" stop-color="#A6ADB7" />
+      <stop offset="100%" stop-color="#939AA6" />
+    </linearGradient>
+    <linearGradient id="noxBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2451FF" />
+      <stop offset="100%" stop-color="#0038FF" />
+    </linearGradient>
+  </defs>
+
+  <!-- Top Eagle Emblem -->
+  <g transform="translate(50, 20) scale(1)">
+    <!-- Eagle Wings -->
+    <path fill="url(#noxSilver)" d="
+      M 250,45 
+      C 255,44 265,48 275,60 
+      C 285,63 295,70 305,80 
+      C 298,86 288,87 280,85
+      C 282,89 285,95 282,100
+      C 275,105 268,106 260,108
+      L 295,150
+      C 320,130 350,90 410,40
+      C 425,90 430,140 400,195
+      C 380,230 350,260 315,280
+      L 322,310
+      C 355,285 395,245 435,190
+      C 445,240 440,285 410,335
+      C 375,375 330,400 290,415
+      L 282,370
+      C 305,355 335,325 355,285
+      L 250,355
+      L 145,285
+      C 165,325 195,355 218,370
+      L 210,415
+      C 170,400 125,375 90,335
+      C 60,285 55,240 65,190
+      C 105,245 145,285 178,310
+      L 185,280
+      C 150,260 120,230 100,195
+      C 70,140 75,90 90,40
+      C 150,90 180,130 205,150
+      L 240,108
+      C 232,106 225,105 218,100
+      C 215,95 218,89 220,85
+      C 212,87 202,86 195,80
+      C 205,70 215,63 225,60
+      C 235,48 245,44 250,45 Z
+    " />
+
+    <!-- Eye in Eagle Head -->
+    <circle cx="265" cy="78" r="3.5" fill="#FFFFFF" />
+
+    <!-- Star Emblem in the Center -->
+    <polygon 
+      points="250,120 282,210 380,210 302,268 332,360 250,305 168,360 198,268 120,210 218,210" 
+      fill="#FFFFFF" 
+      stroke="#FFFFFF" 
+      stroke-width="12" 
+      stroke-linejoin="round"
+    />
+    <polygon 
+      points="250,120 282,210 380,210 302,268 332,360 250,305 168,360 198,268 120,210 218,210" 
+      fill="url(#noxSilver)" 
+    />
+  </g>
+
+  <!-- Typography: NOX 4 -->
+  <g transform="translate(60, 410)">
+    <!-- Letter N -->
+    <path fill="url(#noxSilver)" d="
+      M 15,90 L 15,8 C 15,4 18,0 23,0 L 33,0 C 37,0 40,2 43,6 L 80,60 L 80,8 C 80,4 83,0 88,0 L 98,0 C 103,0 106,4 106,8 L 106,90 C 106,95 102,99 97,99 L 87,99 C 83,99 80,97 77,93 L 41,38 L 41,90 C 41,95 38,99 33,99 L 23,99 C 18,99 15,95 15,90 Z
+    " />
+
+    <!-- Letter O (Distinctive Rounded Squircle) -->
+    <path fill="url(#noxSilver)" fill-rule="evenodd" d="
+      M 130,16 C 130,7 137,0 146,0 L 204,0 C 213,0 220,7 220,16 L 220,83 C 220,92 213,99 204,99 L 146,99 C 137,99 130,92 130,83 Z
+      M 156,24 C 156,20 159,17 163,17 L 187,17 C 191,17 194,20 194,24 L 194,75 C 194,79 191,82 187,82 L 163,82 C 159,82 156,79 156,75 Z
+    " />
+
+    <!-- Letter X -->
+    <path fill="url(#noxSilver)" d="
+      M 245,0 L 265,0 C 269,0 273,2 276,6 L 302,44 L 328,6 C 331,2 335,0 339,0 L 359,0 C 364,0 367,5 364,9 L 324,51 L 366,93 C 369,96 366,101 361,101 L 341,101 C 337,101 333,99 330,95 L 302,57 L 274,95 C 271,99 267,101 263,101 L 243,101 C 238,101 235,96 238,93 L 280,51 L 240,9 C 237,5 240,0 245,0 Z
+    " />
+
+    <!-- Number 4 (Vibrant Royal Blue) -->
+    <path fill="url(#noxBlue)" d="
+      M 425,0 L 425,58 L 448,58 C 452,58 456,62 456,66 L 456,77 C 456,82 452,85 448,85 L 425,85 L 425,93 C 425,98 421,101 416,101 L 398,101 C 394,101 390,98 390,93 L 390,85 L 342,85 C 337,85 333,81 333,76 L 333,65 C 333,61 335,57 338,53 L 392,5 C 395,1 399,0 403,0 L 425,0 Z
+      M 390,26 L 360,60 L 390,60 Z
+    " />
+  </g>
+
+  <!-- Subtitle Tagline: ACELERADORA DE RESULTADOS -->
+  <text 
+    x="300" 
+    y="550" 
+    text-anchor="middle" 
+    font-family="'Montserrat', 'Inter', -apple-system, sans-serif" 
+    font-size="19" 
+    font-weight="700" 
+    letter-spacing="9.5" 
+    fill="#1E293B"
+  >
+    ACELERADORA DE RESULTADOS
+  </text>
+</svg>

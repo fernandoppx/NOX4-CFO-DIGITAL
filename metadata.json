@@ -1,0 +1,6 @@
+{
+  "name": "NOX4 - Gestão Financeira & CFO Digital",
+  "description": "Sistema completo de gestão financeira empresarial com DRE Gerencial, Fluxo de Caixa determinístico, Contas a Pagar e Receber, Orçamento, Centros de Resultado e Indicadores Estratégicos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
