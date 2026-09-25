@@ -746,11 +746,24 @@ export default function App() {
       return false;
     }
 
+    const categoryId = newRev.category_id?.trim();
+    if (!categoryId) {
+      console.error('A categoria da receita é obrigatória.');
+      alert('A categoria da receita é obrigatória.');
+      return false;
+    }
+
     const normStatus = normalizeTransactionStatus(newRev.status);
     const payload = {
       ...newRev,
-      status: normStatus,
       company_id: selectedCompanyId,
+      category_id: categoryId,
+      client_id: newRev.client_id || null,
+      product_id: newRev.product_id || null,
+      cost_center_id: newRev.cost_center_id || null,
+      received_date: newRev.received_date || null,
+      payment_date: newRev.payment_date || null,
+      status: normStatus,
     };
 
     const { data, error } = await supabase
@@ -863,14 +876,29 @@ export default function App() {
       return false;
     }
 
+    const categoryId = updatedRev.category_id?.trim();
+    if (!categoryId) {
+      console.error('A categoria da receita é obrigatória.');
+      alert('A categoria da receita é obrigatória.');
+      return false;
+    }
+
     const { id, created_at, ...updateData } = updatedRev;
+
+    const payload = {
+      ...updateData,
+      company_id: selectedCompanyId,
+      category_id: categoryId,
+      client_id: updatedRev.client_id || null,
+      product_id: updatedRev.product_id || null,
+      cost_center_id: updatedRev.cost_center_id || null,
+      received_date: updatedRev.received_date || null,
+      payment_date: updatedRev.payment_date || null,
+    };
 
     const { data, error } = await supabase
       .from('revenues')
-      .update({
-        ...updateData,
-        company_id: selectedCompanyId,
-      })
+      .update(payload)
       .eq('id', updatedRev.id)
       .eq('company_id', selectedCompanyId)
       .select()
