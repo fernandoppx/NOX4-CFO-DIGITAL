@@ -11,7 +11,8 @@ import {
   ShieldAlert,
   AlertCircle,
 } from 'lucide-react';
-import { Client, Product, CostCenter, Category, Revenue, Expense, TransactionStatus } from '../../types';
+import { Client, Product, CostCenter, Category, Revenue, Expense, TransactionStatus, RevenueCategory } from '../../types';
+import { supabase } from '../../lib/supabase';
 import { formatCurrency } from '../../lib/utils';
 import { normalizeTransactionStatus } from '../../lib/financialEngine';
 import { formatFinancialErrorMessage } from '../../lib/financialErrorMessages';
@@ -24,6 +25,7 @@ interface NewTransactionModalProps {
   costCenters: CostCenter[];
   categories: Category[];
   currentCompanyId: string;
+  selectedCompanyId?: string;
   initialType?: 'revenue' | 'expense';
   defaultStatus?: TransactionStatus | string;
   onAddRevenue: (rev: Omit<Revenue, 'id' | 'created_at'>) => void;
@@ -38,32 +40,21 @@ export const NewTransactionModal: React.FC<NewTransactionModalProps> = ({
   costCenters,
   categories,
   currentCompanyId,
+  selectedCompanyId,
   initialType = 'revenue',
   defaultStatus,
   onAddRevenue,
   onAddExpense,
 }) => {
+  const activeCompanyId = selectedCompanyId || currentCompanyId;
   const [transactionType, setTransactionType] = useState<'revenue' | 'expense'>('revenue');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Filter categories strictly by type
-  const revCategories = useMemo(
-    () =>
-      categories.filter(
-        (c) =>
-          c.type === 'REVENUE' ||
-          c.group === 'revenue' ||
-          c.id.startsWith('rc_') ||
-          (c as any).type === 'services' ||
-          (c as any).type === 'recurring' ||
-          (c as any).type === 'non_recurring' ||
-          (c as any).type === 'products' ||
-          (c as any).type === 'financial' ||
-          (c as any).type === 'other_operational'
-      ),
-    [categories]
-  );
+  // Categorias reais de receita carregadas diretamente do Supabase (NUNCA do mockDatabase)
+  const [supabaseRevCategories, setSupabaseRevCategories] = useState<RevenueCategory[]>([]);
+  const [isLoadingRevCategories, setIsLoadingRevCategories] = useState<boolean>(false);
 
+  // Categorias de despesas filtradas do array categories
   const expCategories = useMemo(
     () =>
       categories.filter(
@@ -78,7 +69,6 @@ export const NewTransactionModal: React.FC<NewTransactionModalProps> = ({
     [categories]
   );
 
-  const availableRevCategories = revCategories.length > 0 ? revCategories : categories;
   const availableExpCategories = expCategories.length > 0 ? expCategories : categories;
 
   // Today's date YYYY-MM-DD
@@ -91,7 +81,7 @@ export const NewTransactionModal: React.FC<NewTransactionModalProps> = ({
     client_id: clients[0]?.id || '',
     product_id: products[0]?.id || '',
     cost_center_id: costCenters[0]?.id || '',
-    category_id: availableRevCategories[0]?.id || '',
+    category_id: '',
     gross_amount: 5000,
     tax_percent: 6.0,
     commission_percent: 5.0,
@@ -119,6 +109,58 @@ export const NewTransactionModal: React.FC<NewTransactionModalProps> = ({
     notes: '',
   });
 
+  // Carrega categorias de receitas diretamente do Supabase ao abrir o modal
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadCategories = async () => {
+      if (!isOpen || !activeCompanyId) return;
+
+      setIsLoadingRevCategories(true);
+      try {
+        const { data, error } = await supabase
+          .from('revenue_categories')
+          .select('*')
+          .eq('company_id', activeCompanyId);
+
+        if (!isMounted) return;
+        setIsLoadingRevCategories(false);
+
+        if (error) {
+          console.error('Erro ao carregar revenue_categories do Supabase:', error);
+          setSupabaseRevCategories([]);
+          setRevForm((prev) => ({ ...prev, category_id: '' }));
+          return;
+        }
+
+        const list = (data as RevenueCategory[]) || [];
+        const activeList = list.filter((c) => c.active !== false);
+        const finalCats = activeList.length > 0 ? activeList : list;
+        setSupabaseRevCategories(finalCats);
+
+        setRevForm((prev) => {
+          const isValid = finalCats.some((c) => c.id === prev.category_id);
+          return {
+            ...prev,
+            category_id: isValid ? prev.category_id : (finalCats[0]?.id || ''),
+          };
+        });
+      } catch (err) {
+        if (!isMounted) return;
+        setIsLoadingRevCategories(false);
+        console.error('Erro inesperado ao buscar categorias de receita:', err);
+        setSupabaseRevCategories([]);
+        setRevForm((prev) => ({ ...prev, category_id: '' }));
+      }
+    };
+
+    loadCategories();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, activeCompanyId]);
+
   useEffect(() => {
     if (isOpen) {
       if (initialType) {
@@ -131,7 +173,6 @@ export const NewTransactionModal: React.FC<NewTransactionModalProps> = ({
         setRevForm((prev) => ({
           ...prev,
           status: revStat,
-          category_id: prev.category_id || availableRevCategories[0]?.id || '',
         }));
         setExpForm((prev) => ({
           ...prev,
@@ -139,16 +180,13 @@ export const NewTransactionModal: React.FC<NewTransactionModalProps> = ({
           category_id: prev.category_id || availableExpCategories[0]?.id || '',
         }));
       } else {
-        if (!revForm.category_id && availableRevCategories[0]?.id) {
-          setRevForm((prev) => ({ ...prev, category_id: availableRevCategories[0].id }));
-        }
         if (!expForm.category_id && availableExpCategories[0]?.id) {
           setExpForm((prev) => ({ ...prev, category_id: availableExpCategories[0].id }));
         }
       }
       setErrorMessage(null);
     }
-  }, [isOpen, initialType, defaultStatus, availableRevCategories, availableExpCategories]);
+  }, [isOpen, initialType, defaultStatus, availableExpCategories]);
 
   if (!isOpen) return null;
 
@@ -161,6 +199,23 @@ export const NewTransactionModal: React.FC<NewTransactionModalProps> = ({
     e.preventDefault();
     setErrorMessage(null);
 
+    if (isLoadingRevCategories) {
+      setErrorMessage('Aguarde o carregamento das categorias de receita.');
+      return;
+    }
+
+    if (supabaseRevCategories.length === 0 || !revForm.category_id) {
+      setErrorMessage('Cadastre uma categoria de receita primeiro.');
+      return;
+    }
+
+    // Validação estrita: o category_id deve vir exclusivamente de revenue_categories do Supabase
+    const selectedCategory = supabaseRevCategories.find((c) => c.id === revForm.category_id);
+    if (!selectedCategory || !selectedCategory.id || selectedCategory.id.startsWith('cat_') || selectedCategory.id.startsWith('rc_')) {
+      setErrorMessage('Cadastre uma categoria de receita primeiro.');
+      return;
+    }
+
     if (!revForm.description.trim()) {
       setErrorMessage('Por favor, informe a descrição da receita.');
       return;
@@ -171,22 +226,18 @@ export const NewTransactionModal: React.FC<NewTransactionModalProps> = ({
       return;
     }
 
-    // Validate category is a valid revenue category
-    const validCategory = availableRevCategories.find((c) => c.id === revForm.category_id) || availableRevCategories[0];
-    const categoryId = validCategory ? validCategory.id : revForm.category_id;
-
     const normStatus = normalizeTransactionStatus(revForm.status);
     const effectiveReceivedDate =
       normStatus === 'received' ? (revForm.received_date || revForm.competence_date || todayStr) : undefined;
 
     try {
       onAddRevenue({
-        company_id: currentCompanyId,
+        company_id: activeCompanyId,
         description: revForm.description.trim(),
         client_id: revForm.client_id || undefined,
         product_id: revForm.product_id || undefined,
         cost_center_id: revForm.cost_center_id,
-        category_id: categoryId,
+        category_id: selectedCategory.id,
         gross_amount: revForm.gross_amount,
         tax_amount: taxAmount,
         commission_amount: commissionAmount,
@@ -393,17 +444,29 @@ export const NewTransactionModal: React.FC<NewTransactionModalProps> = ({
 
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">Categoria DRE (Receitas) *</label>
-                <select
-                  value={revForm.category_id}
-                  onChange={(e) => setRevForm({ ...revForm, category_id: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 outline-none cursor-pointer"
-                >
-                  {availableRevCategories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
+                {isLoadingRevCategories ? (
+                  <div className="py-2 px-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-400 text-xs">
+                    Carregando categorias...
+                  </div>
+                ) : supabaseRevCategories.length === 0 ? (
+                  <div className="p-2.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-xs font-medium flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+                    <span>Cadastre uma categoria de receita primeiro.</span>
+                  </div>
+                ) : (
+                  <select
+                    value={revForm.category_id}
+                    onChange={(e) => setRevForm({ ...revForm, category_id: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 outline-none cursor-pointer"
+                    required
+                  >
+                    {supabaseRevCategories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
             </div>
 
@@ -532,7 +595,12 @@ export const NewTransactionModal: React.FC<NewTransactionModalProps> = ({
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold font-heading shadow-xs transition-all cursor-pointer"
+                disabled={isLoadingRevCategories || supabaseRevCategories.length === 0}
+                className={`px-5 py-2 rounded-lg text-white font-bold font-heading shadow-xs transition-all ${
+                  isLoadingRevCategories || supabaseRevCategories.length === 0
+                    ? 'bg-slate-300 cursor-not-allowed opacity-75'
+                    : 'bg-blue-600 hover:bg-blue-700 cursor-pointer'
+                }`}
               >
                 Salvar Receita
               </button>

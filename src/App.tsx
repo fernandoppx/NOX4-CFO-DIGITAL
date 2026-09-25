@@ -2141,6 +2141,7 @@ const handleUpdateCostCenter = (cc: CostCenter) => {
         costCenters={companyCostCenters}
         categories={allCategories}
         currentCompanyId={selectedCompanyId}
+        selectedCompanyId={selectedCompanyId}
         initialType={newTransactionInitialType}
         defaultStatus={newTransactionDefaultStatus}
         onAddRevenue={handleAddRevenue}
