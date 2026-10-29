@@ -41,6 +41,30 @@ const toNumber = (v: unknown): number => {
   return isFinite(n) ? n : 0;
 };
 
+const REVENUE_TYPES = ['services', 'products', 'recurring', 'non_recurring', 'other_operational', 'financial'];
+const EXPENSE_GROUPS = [
+  'deductions',
+  'cost_of_services',
+  'commercial',
+  'administrative',
+  'operational',
+  'depreciation',
+  'financial',
+  'taxes_profit',
+  'equity',
+];
+/** Valores aceitos pelas regras (CHECK) das tabelas do plano de contas */
+const safeRevenueType = (t: unknown) => (REVENUE_TYPES.includes(String(t)) ? String(t) : 'services');
+const safeExpenseGroup = (g: unknown) => {
+  const v = String(g || '').toLowerCase();
+  return EXPENSE_GROUPS.includes(v) ? v : 'operational';
+};
+const safeCostType = (t: unknown) => (String(t).toLowerCase() === 'variable' ? 'variable' : 'fixed');
+const safeExpenseStatus = (st: unknown) => {
+  const n = normalizeTransactionStatus(String(st || 'pending'));
+  return n === 'received' ? 'paid' : n;
+};
+
 function errMsg(error: any): string {
   return String(error?.message || error || 'Erro desconhecido ao acessar o banco de dados.');
 }
@@ -164,8 +188,9 @@ export async function loadCompanyFinancialData(companyId: string): Promise<Resul
 // Despesas
 // ---------------------------------------------------------------------------
 function expensePayload(exp: Partial<Expense>, companyId: string) {
-  const status = normalizeTransactionStatus(exp.status || 'pending');
-  const paid = status === 'paid' ? emptyToNull(exp.paid_date || exp.payment_date) : null;
+  const status = safeExpenseStatus(exp.status);
+  const paid =
+    status === 'paid' ? emptyToNull(exp.paid_date || exp.payment_date) || exp.competence_date || null : null;
   return {
     company_id: companyId,
     cost_center_id: isUuid(exp.cost_center_id) ? exp.cost_center_id : null,
@@ -176,8 +201,11 @@ function expensePayload(exp: Partial<Expense>, companyId: string) {
     due_date: exp.due_date || exp.competence_date,
     paid_date: paid,
     payment_date: paid,
-    amount: toNumber(exp.amount),
-    cost_nature: exp.cost_nature ? String(exp.cost_nature).toUpperCase() : null,
+    amount: Math.abs(toNumber(exp.amount)),
+    cost_nature:
+      exp.cost_nature && ['FIXED', 'VARIABLE'].includes(String(exp.cost_nature).toUpperCase())
+        ? String(exp.cost_nature).toUpperCase()
+        : null,
     status,
     payment_method: emptyToNull(exp.payment_method),
     is_recurring: Boolean(exp.is_recurring),
@@ -222,7 +250,7 @@ export async function insertRevenueCategory(
 ): Promise<Result<RevenueCategory>> {
   const { data, error } = await supabase
     .from('revenue_categories')
-    .insert({ company_id: companyId, name: cat.name.trim(), type: cat.type || 'services', active: cat.active ?? true })
+    .insert({ company_id: companyId, name: cat.name.trim(), type: safeRevenueType(cat.type), active: cat.active ?? true })
     .select()
     .single();
   if (error) return { data: null, error: errMsg(error) };
@@ -238,8 +266,8 @@ export async function insertExpenseCategory(
     .insert({
       company_id: companyId,
       name: cat.name.trim(),
-      group: cat.group || 'operational',
-      type: cat.type || 'fixed',
+      group: safeExpenseGroup(cat.group),
+      type: safeCostType(cat.type),
       active: cat.active ?? true,
     })
     .select()
@@ -254,7 +282,7 @@ export async function insertExpenseCategory(
 export async function updateRevenueCategory(cat: RevenueCategory, companyId: string): Promise<Result<true>> {
   const { error } = await supabase
     .from('revenue_categories')
-    .update({ name: cat.name, type: cat.type, active: cat.active, updated_at: new Date().toISOString() })
+    .update({ name: cat.name, type: safeRevenueType(cat.type), active: cat.active, updated_at: new Date().toISOString() })
     .eq('id', cat.id)
     .eq('company_id', companyId);
   return error ? { data: null, error: errMsg(error) } : { data: true, error: null };
@@ -263,7 +291,13 @@ export async function updateRevenueCategory(cat: RevenueCategory, companyId: str
 export async function updateExpenseCategory(cat: ExpenseCategory, companyId: string): Promise<Result<true>> {
   const { error } = await supabase
     .from('expense_categories')
-    .update({ name: cat.name, group: cat.group, type: cat.type, active: cat.active, updated_at: new Date().toISOString() })
+    .update({
+      name: cat.name,
+      group: safeExpenseGroup(cat.group),
+      type: safeCostType(cat.type),
+      active: cat.active,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', cat.id)
     .eq('company_id', companyId);
   return error ? { data: null, error: errMsg(error) } : { data: true, error: null };
@@ -501,6 +535,23 @@ async function runLegacyMigration(
       // ignore
     }
   };
+  // Lançamentos já enviados (por id antigo): nunca são enviados de novo,
+  // mesmo que a migração seja interrompida no meio.
+  const doneKey = flagKey + '_items';
+  let doneIds = new Set<string>();
+  try {
+    doneIds = new Set<string>(JSON.parse(localStorage.getItem(doneKey) || '[]'));
+  } catch {
+    doneIds = new Set<string>();
+  }
+  const rememberDone = (legacyId: string) => {
+    doneIds.add(legacyId);
+    try {
+      localStorage.setItem(doneKey, JSON.stringify(Array.from(doneIds)));
+    } catch {
+      // ignore
+    }
+  };
 
   if (!legacy || typeof legacy !== 'object') {
     markDone();
@@ -556,6 +607,7 @@ async function runLegacyMigration(
     current.expenseCategories.find((c) => c.group === 'operational')?.id || current.expenseCategories[0]?.id;
   const ccIds = new Set(current.costCenters.map((c) => c.id));
   for (const e of legacyExpenses) {
+    if (doneIds.has(String(e.id))) continue;
     if (isUuid(e.id) && current.expenses.some((x) => x.id === e.id)) continue;
     const catId = expCatIdMap.get(e.category_id) || (isUuid(e.category_id) ? e.category_id : fallbackExpCat);
     if (!catId) continue;
@@ -567,8 +619,10 @@ async function runLegacyMigration(
       },
       companyId
     );
-    if (res.data) migrated++;
-    else if (res.error) lastError = res.error;
+    if (res.data) {
+      migrated++;
+      rememberDone(String(e.id));
+    } else if (res.error) lastError = res.error;
   }
 
   // 3. Orçamentos.
@@ -598,7 +652,10 @@ async function runLegacyMigration(
     }
   }
 
-  if (!lastError) markDone();
+  // Conclui sempre: o que falhou fica registrado no console, mas nunca é
+  // reenviado em loop (o que duplicaria lançamentos).
+  if (lastError) console.warn('Migração de dados locais concluída com avisos:', lastError);
+  markDone();
   return { migrated, error: lastError };
 }
 
