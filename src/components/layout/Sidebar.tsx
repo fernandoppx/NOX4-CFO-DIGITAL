@@ -21,7 +21,6 @@ import {
   ChevronDown,
   UserPlus,
   LogOut,
-  Sparkles,
   X,
 } from 'lucide-react';
 import { NoxLogo } from '../brand/NoxLogo';
@@ -43,7 +42,6 @@ export type NavTab =
   | 'team'
   | 'settings'
   | 'billing'
-  | 'cfo_ai'
   | 'admin_panel';
 
 interface SidebarProps {
@@ -100,7 +98,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: 'VISÃO GERAL',
       items: [
         { id: 'dashboard' as NavTab, label: 'Dashboard', icon: LayoutDashboard, badge: 'Executivo' },
-        { id: 'cfo_ai' as NavTab, label: 'CFO Digital IA', icon: Sparkles, badge: 'IA' },
       ],
     },
     {

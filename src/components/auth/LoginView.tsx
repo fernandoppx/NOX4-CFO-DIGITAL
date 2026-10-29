@@ -344,8 +344,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 <Bot className="w-4 h-4 text-purple-400" />
               </div>
               <div>
-                <h2 className="text-xs font-bold text-slate-200">CFO Digital com IA</h2>
-                <p className="text-[11px] text-slate-400 mt-0.5">Análises de runway, CAC, LTV e alertas proativos.</p>
+                <h2 className="text-xs font-bold text-slate-200">Indicadores & Alertas</h2>
+                <p className="text-[11px] text-slate-400 mt-0.5">Runway, ponto de equilíbrio, inadimplência e alertas automáticos.</p>
               </div>
             </div>
 

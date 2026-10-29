@@ -63,7 +63,6 @@ import {
   deleteBankAccount as deleteBankAccountInDb,
 } from './lib/financialRepository';
 import { getCurrentYearMonth, getTodayISO } from './lib/utils';
-import { CfoAiView } from './components/analysis/CfoAiView';
 
 import {
   calculateDRE,
@@ -814,7 +813,6 @@ export default function App() {
     team: 'Equipe da Empresa',
     settings: 'Configurações & Governança',
     billing: 'Plano e Cobrança',
-    cfo_ai: 'CFO Digital IA',
     admin_panel: 'Painel Global do System Admin',
   };
 
@@ -2012,20 +2010,6 @@ export default function App() {
             </div>
           )}
 
-          {currentTab === 'cfo_ai' && (
-            <CfoAiView
-              companyName={currentCompany.name}
-              selectedMonth={selectedMonth}
-              currentDRE={currentDRE}
-              previousDRE={previousDRE}
-              indicators={indicators}
-              cashFlowPeriods={cashFlowPeriods}
-              alerts={proactiveAlerts}
-              clientsProfitability={clientsProfitability}
-              expenseCategories={companyExpenseCategories}
-              expenses={companyExpenses}
-            />
-          )}
           {currentTab === 'admin_panel' && isSysAdmin && (
             <SystemAdminPanel
               currentUser={currentUser}
