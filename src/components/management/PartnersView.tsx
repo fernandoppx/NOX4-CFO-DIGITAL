@@ -57,13 +57,13 @@ export const PartnersView: React.FC<PartnersViewProps> = ({
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [selectedPartnerId, setSelectedPartnerId] = useState(partners[0]?.id || '');
-  const [distAmount, setDistAmount] = useState(10000);
+  const [distAmount, setDistAmount] = useState(0);
   const [distDate, setDistDate] = useState(() => getTodayISO());
 
   const [partnerFormData, setPartnerFormData] = useState({
     name: '',
-    equity_percentage: 10,
-    prolabore_amount: 5000,
+    equity_percentage: 0,
+    prolabore_amount: 0,
     role: 'Sócio Diretor',
     document: '',
   });
@@ -80,8 +80,8 @@ export const PartnersView: React.FC<PartnersViewProps> = ({
     setEditingPartner(null);
     setPartnerFormData({
       name: '',
-      equity_percentage: 10,
-      prolabore_amount: 5000,
+      equity_percentage: 0,
+      prolabore_amount: 0,
       role: 'Sócio Diretor',
       document: '',
     });
@@ -501,7 +501,8 @@ export const PartnersView: React.FC<PartnersViewProps> = ({
                   <input
                     type="number"
                     step="0.1"
-                    value={partnerFormData.equity_percentage}
+                    value={partnerFormData.equity_percentage || ''}
+                    placeholder="Ex: 50"
                     onChange={(e) =>
                       setPartnerFormData({
                         ...partnerFormData,
@@ -516,7 +517,8 @@ export const PartnersView: React.FC<PartnersViewProps> = ({
                   <input
                     type="number"
                     step="100"
-                    value={partnerFormData.prolabore_amount}
+                    value={partnerFormData.prolabore_amount || ''}
+                    placeholder="Ex: 5000"
                     onChange={(e) =>
                       setPartnerFormData({
                         ...partnerFormData,
@@ -642,7 +644,8 @@ export const PartnersView: React.FC<PartnersViewProps> = ({
                     type="number"
                     step="100"
                     required
-                    value={distAmount}
+                    value={distAmount || ''}
+                    placeholder="Ex: 10000"
                     onChange={(e) => setDistAmount(parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-500 focus:bg-white font-mono font-bold"
                   />

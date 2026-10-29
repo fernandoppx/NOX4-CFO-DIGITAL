@@ -12,7 +12,7 @@ import {
   DollarSign,
 } from 'lucide-react';
 import { Budget, Category, CostCenter, Expense, Revenue } from '../../types';
-import { formatCurrency, formatPercent, parseDecimalInput } from '../../lib/utils';
+import { formatCurrency, formatPercent, parseDecimalInput, getGroupLabel } from '../../lib/utils';
 import { MonthPickerFilter } from '../common/MonthPickerFilter';
 
 interface BudgetViewProps {
@@ -192,7 +192,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                   <td className="py-3 px-4">
                     <div className="font-semibold text-slate-800">{item.category.name}</div>
                     <div className="text-[10px] text-slate-400 font-mono">
-                      Grupo: {item.category.type}
+                      Grupo: {getGroupLabel(String(item.category.group || ''))}
                     </div>
                   </td>
 

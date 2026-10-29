@@ -85,8 +85,8 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
     email: '',
     phone: '',
     contract_start_date: '2026-01-01',
-    contract_value: 5000,
-    mrr: 5000,
+    contract_value: 0,
+    mrr: 0,
     status: 'active' as 'active' | 'churned' | 'prospect',
   });
 
@@ -112,8 +112,8 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
         email: '',
         phone: '',
         contract_start_date: getTodayISO(),
-        contract_value: 6000,
-        mrr: 6000,
+        contract_value: 0,
+        mrr: 0,
         status: 'active',
       });
     }
@@ -478,7 +478,8 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
                   <input
                     type="number"
                     step="0.01"
-                    value={formData.mrr}
+                    value={formData.mrr || ''}
+                    placeholder="Ex: 5000"
                     onChange={(e) => setFormData({ ...formData, mrr: parseFloat(e.target.value) || 0, contract_value: parseFloat(e.target.value) || 0 })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-500 focus:bg-white"
                   />

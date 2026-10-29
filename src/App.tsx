@@ -1692,7 +1692,7 @@ export default function App() {
     }
   };
 
-  const handleImportCSV = async (type: 'revenues' | 'expenses', csvContent: string) => {
+  const handleImportCSV = async (type: 'revenues' | 'expenses', csvContent: string): Promise<string> => {
     const lines = csvContent.split(/\r?\n/).filter((l) => l.trim());
     const defaultRevCat =
       companyRevenueCategories.find((c) => c.active !== false && c.type === 'services') ||
@@ -1767,9 +1767,9 @@ export default function App() {
         else skipped++;
       }
     }
-    alert(
+    return (
       `Importação concluída: ${ok} lançamento(s) importado(s)${skipped ? `, ${skipped} linha(s) ignorada(s)` : ''}. ` +
-        'Eles entraram como pendentes, na categoria padrão: revise categoria e status em cada um.'
+      'Eles entraram como pendentes, na categoria padrão: revise categoria e status em cada um.'
     );
   };
 

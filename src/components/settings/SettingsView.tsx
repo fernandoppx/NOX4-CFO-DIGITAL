@@ -65,7 +65,7 @@ interface SettingsViewProps {
   onUpdateCategory?: (cat: Category) => void;
   onDeleteCategory?: (catId: string) => void;
   onResetDatabase: () => void;
-  onImportCSV: (type: 'revenues' | 'expenses', csvContent: string) => void;
+  onImportCSV: (type: 'revenues' | 'expenses', csvContent: string) => void | Promise<string | void>;
   isPreviewMode?: boolean;
   billingPreviewData?: {
     subscription: Subscription;
@@ -331,14 +331,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   // CSV Import Submit
-  const handleProcessImport = () => {
-    if (!csvText.trim()) return;
-    onImportCSV(importType, csvText);
-    setImportSuccess(true);
-    setTimeout(() => {
-      setImportSuccess(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const handleProcessImport = async () => {
+    if (!csvText.trim() || isImporting) return;
+    setIsImporting(true);
+    setImportMessage(null);
+    try {
+      const msg = await onImportCSV(importType, csvText);
+      setImportMessage(typeof msg === 'string' ? msg : 'Lançamentos importados.');
+      setImportSuccess(true);
       setCsvText('');
-    }, 3000);
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   const getRoleBadge = (role: CompanyRole) => {
@@ -934,12 +940,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <div className="flex items-center justify-between">
             {importSuccess && (
               <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
-                <CheckCircle2 className="w-4 h-4" /> Lançamentos importados e recalculados com sucesso!
+                <CheckCircle2 className="w-4 h-4 shrink-0" /> {importMessage || 'Lançamentos importados.'}
               </span>
             )}
             <button
               onClick={handleProcessImport}
-              disabled={!csvText.trim()}
+              disabled={!csvText.trim() || isImporting}
               className="ml-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold font-heading shadow-xs transition-all flex items-center gap-2 cursor-pointer"
             >
               <Upload className="w-3.5 h-3.5" />
