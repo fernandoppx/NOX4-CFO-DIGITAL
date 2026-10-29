@@ -1,6 +1,6 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight, Calendar, Sparkles } from 'lucide-react';
-import { formatMonthYear, getPreviousMonth, getNextMonth } from '../../lib/utils';
+import { formatMonthYear, getPreviousMonth, getNextMonth, getCurrentYearMonth, formatShortMonth } from '../../lib/utils';
 
 interface MonthPickerFilterProps {
   selectedMonth: string; // 'YYYY-MM' or 'ALL'
@@ -27,7 +27,10 @@ const MONTH_NAMES = [
   { value: '12', label: 'Dezembro' },
 ];
 
-const AVAILABLE_YEARS = ['2024', '2025', '2026', '2027', '2028'];
+const buildYears = () => {
+  const y = parseInt(getCurrentYearMonth().slice(0, 4), 10);
+  return [y - 3, y - 2, y - 1, y, y + 1, y + 2].map(String);
+};
 
 export const MonthPickerFilter: React.FC<MonthPickerFilterProps> = ({
   selectedMonth,
@@ -39,18 +42,20 @@ export const MonthPickerFilter: React.FC<MonthPickerFilterProps> = ({
   className = '',
 }) => {
   const isAll = selectedMonth === 'ALL';
+  const todayMonth = getCurrentYearMonth();
 
   // Parse current year and month
-  let currentYear = '2026';
-  let currentMonth = '08';
+  let currentYear = todayMonth.slice(0, 4);
+  let currentMonth = todayMonth.slice(5, 7);
 
   if (!isAll && selectedMonth && selectedMonth.includes('-')) {
     const parts = selectedMonth.split('-');
-    currentYear = parts[0] || '2026';
-    currentMonth = parts[1] || '08';
+    currentYear = parts[0] || currentYear;
+    currentMonth = parts[1] || currentMonth;
   }
 
   // Ensure year is in available list or prepend/append
+  const AVAILABLE_YEARS = buildYears();
   const years = AVAILABLE_YEARS.includes(currentYear)
     ? AVAILABLE_YEARS
     : [...AVAILABLE_YEARS, currentYear].sort();
@@ -73,7 +78,7 @@ export const MonthPickerFilter: React.FC<MonthPickerFilterProps> = ({
 
   const handlePrev = () => {
     if (isAll) {
-      onSelectMonth('2026-08');
+      onSelectMonth(todayMonth);
     } else {
       onSelectMonth(getPreviousMonth(selectedMonth));
     }
@@ -81,18 +86,14 @@ export const MonthPickerFilter: React.FC<MonthPickerFilterProps> = ({
 
   const handleNext = () => {
     if (isAll) {
-      onSelectMonth('2026-08');
+      onSelectMonth(todayMonth);
     } else {
       onSelectMonth(getNextMonth(selectedMonth));
     }
   };
 
   const handleCurrentMonth = () => {
-    const today = new Date();
-    const curY = today.getFullYear().toString();
-    const curM = String(today.getMonth() + 1).padStart(2, '0');
-    // If running in sample data year (2026), default to 2026-08 or actual
-    onSelectMonth(`2026-08`);
+    onSelectMonth(todayMonth);
   };
 
   if (variant === 'minimal') {
@@ -212,15 +213,15 @@ export const MonthPickerFilter: React.FC<MonthPickerFilterProps> = ({
         <ChevronRight className="w-4 h-4" />
       </button>
 
-      {/* Quick Agosto/2026 Reset / Atual Button */}
-      {selectedMonth !== '2026-08' && (
+      {/* Atalho para voltar ao mês atual */}
+      {selectedMonth !== todayMonth && (
         <button
           type="button"
           onClick={handleCurrentMonth}
-          title="Voltar para Agosto de 2026 (Competência Vigente)"
-          className="px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors cursor-pointer shrink-0"
+          title={`Voltar para o mês atual (${formatShortMonth(todayMonth)})`}
+          className="hidden sm:inline-flex px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors cursor-pointer shrink-0"
         >
-          Agosto/26
+          Mês atual
         </button>
       )}
     </div>

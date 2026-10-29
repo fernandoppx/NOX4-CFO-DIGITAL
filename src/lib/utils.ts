@@ -66,14 +66,14 @@ export function formatShortMonth(yearMonth: string): string {
 }
 
 export function getPreviousMonth(yearMonth: string): string {
-  if (!yearMonth || !yearMonth.includes('-')) return '2026-08';
+  if (!yearMonth || !yearMonth.includes('-')) return getCurrentYearMonth();
   const [year, month] = yearMonth.split('-').map(Number);
   const prevDate = new Date(year, month - 2, 1);
   return `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
 }
 
 export function getNextMonth(yearMonth: string): string {
-  if (!yearMonth || !yearMonth.includes('-')) return '2026-08';
+  if (!yearMonth || !yearMonth.includes('-')) return getCurrentYearMonth();
   const [year, month] = yearMonth.split('-').map(Number);
   const nextDate = new Date(year, month, 1);
   return `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`;
@@ -142,4 +142,82 @@ export function downloadCSV(filename: string, rows: (string | number)[][]) {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+}
+
+/** Mês atual no fuso de São Paulo, no formato YYYY-MM. */
+export function getCurrentYearMonth(now: Date = new Date()): string {
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+    }).formatToParts(now);
+    const y = parts.find((p) => p.type === 'year')?.value;
+    const m = parts.find((p) => p.type === 'month')?.value;
+    if (y && m) return `${y}-${m}`;
+  } catch {
+    // fallback abaixo
+  }
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** Data de hoje no fuso de São Paulo, no formato YYYY-MM-DD. */
+export function getTodayISO(now: Date = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(now);
+  } catch {
+    return now.toISOString().slice(0, 10);
+  }
+}
+
+/** Soma dias a uma data YYYY-MM-DD. */
+export function addDaysISO(dateISO: string, days: number): string {
+  const [y, m, d] = dateISO.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+}
+
+/** Nome em português dos grupos do plano de contas. */
+export const EXPENSE_GROUP_LABELS: Record<string, string> = {
+  revenue: 'Receita',
+  deductions: 'Deduções da Receita',
+  cost_of_services: 'Custos dos Serviços (CSP)',
+  commercial: 'Despesas Comerciais',
+  administrative: 'Despesas Administrativas',
+  operational: 'Despesas Operacionais',
+  depreciation: 'Depreciação',
+  financial: 'Resultado Financeiro',
+  taxes_profit: 'Impostos sobre o Lucro',
+  equity: 'Movimentação de Sócios',
+};
+
+export function getGroupLabel(group?: string | null): string {
+  if (!group) return '';
+  const key = String(group).toLowerCase();
+  if (key === 'revenue' || group === 'REVENUE') return 'Receita';
+  return EXPENSE_GROUP_LABELS[key] || group;
+}
+
+/** Converte texto de campo numérico (aceita vírgula) em número. Vazio = 0. */
+export function parseDecimalInput(value: string | number | null | undefined): number {
+  if (typeof value === 'number') return isFinite(value) ? value : 0;
+  if (!value) return 0;
+  const cleaned = String(value).trim().replace(/\s/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.');
+  const n = parseFloat(cleaned);
+  return isFinite(n) ? n : 0;
+}
+
+/** Formatação compacta para eixos de gráficos: R$ 950, R$ 1,2 mil, R$ 3,4 mi. */
+export function formatAxisCurrency(value: number): string {
+  const abs = Math.abs(value);
+  const sign = value < 0 ? '-' : '';
+  if (abs >= 1_000_000) return `${sign}R$ ${(abs / 1_000_000).toFixed(1).replace('.', ',')} mi`;
+  if (abs >= 1_000) return `${sign}R$ ${(abs / 1_000).toFixed(abs >= 10_000 ? 0 : 1).replace('.', ',')} mil`;
+  return `${sign}R$ ${Math.round(abs)}`;
 }

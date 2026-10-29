@@ -36,7 +36,8 @@ import {
 import { EditCompanyModal } from './EditCompanyModal';
 import { ManageCompanyUsersModal } from './ManageCompanyUsersModal';
 import { EditUserModal } from './EditUserModal';
-import { EditCategoryModal } from './EditCategoryModal';
+import { EditCategoryModal, CategoryFormData } from './EditCategoryModal';
+import { getGroupLabel } from '../../lib/utils';
 import { TeamManagementTab } from './TeamManagementTab';
 import { PlanAndBillingView } from './PlanAndBillingView';
 import { formatFinancialErrorMessage } from '../../lib/financialErrorMessages';
@@ -108,7 +109,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     'team' | 'companies' | 'users' | 'categories' | 'import' | 'database' | 'billing'
-  >(initialSubTab || 'team');
+  >(initialSubTab && initialSubTab !== 'team' && initialSubTab !== 'users' ? initialSubTab : 'categories');
 
   // Company Modals state
   const [isEditCompanyModalOpen, setIsEditCompanyModalOpen] = useState(false);
@@ -287,33 +288,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setIsEditCategoryModalOpen(true);
   };
 
-  const handleSaveCategory = (data: {
-    id?: string;
-    name: string;
-    code: string;
-    type: CategoryType;
-    description?: string;
-  }) => {
+  const handleSaveCategory = async (data: CategoryFormData) => {
     setCategoryError(null);
+    const isRevenue = data.group === 'revenue';
     try {
       if (data.id && onUpdateCategory) {
         const existing = categories.find((c) => c.id === data.id);
         if (existing) {
-          onUpdateCategory({
+          await onUpdateCategory({
             ...existing,
             name: data.name,
-            code: data.code,
-            type: data.type,
-            description: data.description,
-          });
+            group: data.group,
+            type: isRevenue ? 'REVENUE' : data.group.toUpperCase(),
+            cost_type: data.cost_type,
+          } as any);
         }
       } else if (onAddCategory) {
-        onAddCategory({
+        await onAddCategory({
           name: data.name,
-          code: data.code,
-          type: data.type,
-          description: data.description,
-        });
+          group: data.group,
+          type: isRevenue ? 'REVENUE' : data.group.toUpperCase(),
+          cost_type: data.cost_type,
+          active: true,
+        } as any);
       }
     } catch (err) {
       setCategoryError(formatFinancialErrorMessage(err, data.id ? 'update' : 'create', 'category'));
@@ -374,42 +371,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </span>
             </div>
             <h2 className="text-xl font-bold text-slate-800 mt-1 font-heading tracking-tight">
-              Gestão Completa de Usuários, Empresas & Contas
+              Configurações da Empresa
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Inclua, edite, salve e exclua usuários, empresas, plano de contas e permissões do grupo NOX4
+              Empresas, plano de contas, importação de lançamentos e segurança. A equipe e os convites ficam no menu Equipe.
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                if (window.confirm('Tem certeza que deseja restaurar os dados de demonstração originais?')) {
-                  onResetDatabase();
-                }
-              }}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg border border-slate-200 transition-colors cursor-pointer"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Restaurar Base Oficial</span>
-            </button>
-          </div>
         </div>
 
         {/* Sub-tabs */}
         <div className="flex items-center gap-2 pt-3 border-t border-slate-100 overflow-x-auto">
-          <button
-            id="tab-btn-team"
-            onClick={() => setActiveSubTab('team')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeSubTab === 'team'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 bg-slate-50 border border-slate-200'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Equipe & Convites</span>
-          </button>
           <button
             onClick={() => setActiveSubTab('companies')}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
@@ -421,16 +393,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             Empresas Cadastradas ({companies.length})
           </button>
           <button
-            onClick={() => setActiveSubTab('users')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              activeSubTab === 'users'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 bg-slate-50 border border-slate-200'
-            }`}
-          >
-            Usuários Globais ({users.length})
-          </button>
-          <button
             onClick={() => setActiveSubTab('categories')}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
               activeSubTab === 'categories'
@@ -438,7 +400,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 : 'text-slate-600 hover:text-slate-900 bg-slate-50 border border-slate-200'
             }`}
           >
-            Plano de Contas DRE ({categories.length})
+            Plano de Contas ({categories.filter((c) => c.active !== false).length})
           </button>
           <button
             onClick={() => setActiveSubTab('import')}
@@ -865,43 +827,66 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {categories.map((cat) => (
-              <div
-                key={cat.id}
-                className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl flex items-center justify-between text-xs hover:border-slate-300 transition-all"
-              >
-                <div>
-                  <div className="font-semibold text-slate-800">{cat.name}</div>
-                  <div className="text-[10px] text-slate-400 font-mono">Código DRE: {cat.code}</div>
-                  {cat.description && (
-                    <div className="text-[11px] text-slate-500 mt-1">{cat.description}</div>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                    {cat.type}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEditCategory(cat)}
-                    title="Editar Categoria"
-                    className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-white rounded-lg transition-colors cursor-pointer border border-transparent hover:border-slate-200"
+          {categories.length === 0 && (
+            <div className="p-6 text-center text-xs text-slate-500 bg-slate-50 border border-dashed border-slate-200 rounded-xl">
+              Nenhuma conta cadastrada. Crie as contas que sua empresa usa para classificar receitas e despesas.
+            </div>
+          )}
+
+          {Object.entries(
+            categories.reduce<Record<string, Category[]>>((acc, cat) => {
+              const key = cat.type === 'REVENUE' || cat.group === 'revenue' ? 'revenue' : String(cat.group || 'operational');
+              (acc[key] = acc[key] || []).push(cat);
+              return acc;
+            }, {})
+          ).map(([group, cats]) => (
+            <div key={group} className="space-y-2">
+              <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{getGroupLabel(group)}</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {cats.map((cat) => (
+                  <div
+                    key={cat.id}
+                    className={`border p-3 rounded-xl flex items-center justify-between gap-2 text-xs transition-all ${
+                      cat.active === false ? 'bg-slate-50 border-dashed border-slate-200 opacity-60' : 'bg-slate-50 border-slate-200 hover:border-slate-300'
+                    }`}
                   >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCategoryToDelete(cat)}
-                    title="Apagar Categoria"
-                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-white rounded-lg transition-colors cursor-pointer border border-transparent hover:border-slate-200"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-800 truncate">{cat.name}</div>
+                      <div className="text-[10px] text-slate-400">
+                        {cat.active === false
+                          ? 'Desativada (tem lançamentos antigos)'
+                          : group === 'revenue'
+                          ? 'Receita'
+                          : (cat as any).cost_type === 'variable'
+                          ? 'Custo variável'
+                          : 'Custo fixo'}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditCategory(cat)}
+                        title="Editar conta"
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-white rounded-lg transition-colors cursor-pointer border border-transparent hover:border-slate-200"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      {cat.active !== false && (
+                        <button
+                          type="button"
+                          onClick={() => setCategoryToDelete(cat)}
+                          title="Excluir conta"
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-white rounded-lg transition-colors cursor-pointer border border-transparent hover:border-slate-200"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       )}
 

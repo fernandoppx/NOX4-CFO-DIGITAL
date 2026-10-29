@@ -16,7 +16,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { Expense, CostCenter, Category, TransactionStatus } from '../../types';
-import { formatCurrency, formatDate } from '../../lib/utils';
+import { formatCurrency, formatDate, getCurrentYearMonth } from '../../lib/utils';
 import { normalizeTransactionStatus } from '../../lib/financialEngine';
 import { MonthPickerFilter } from '../common/MonthPickerFilter';
 import { formatFinancialErrorMessage, formatNullableText } from '../../lib/financialErrorMessages';
@@ -37,7 +37,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
   expenses,
   costCenters,
   categories,
-  selectedMonth = '2026-08',
+  selectedMonth = getCurrentYearMonth(),
   onSelectMonth,
   onOpenNewExpenseModal,
   onEditExpense,

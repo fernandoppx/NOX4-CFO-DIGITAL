@@ -16,7 +16,7 @@ import {
   Edit2,
 } from 'lucide-react';
 import { Revenue, Expense, Client, CostCenter, TransactionStatus } from '../../types';
-import { formatCurrency, formatDate, downloadCSV } from '../../lib/utils';
+import { formatCurrency, formatDate, downloadCSV, getCurrentYearMonth } from '../../lib/utils';
 import { normalizeTransactionStatus } from '../../lib/financialEngine';
 import { MonthPickerFilter } from '../common/MonthPickerFilter';
 import { formatFinancialErrorMessage } from '../../lib/financialErrorMessages';
@@ -42,7 +42,7 @@ export const ReceivablesPayablesView: React.FC<ReceivablesPayablesViewProps> = (
   expenses,
   clients,
   costCenters,
-  selectedMonth = '2026-08',
+  selectedMonth = getCurrentYearMonth(),
   onSelectMonth,
   onMarkAsReceived,
   onMarkAsPaid,

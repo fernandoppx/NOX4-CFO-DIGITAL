@@ -39,13 +39,31 @@ import {
   createOrganizationRPC,
 } from './lib/supabaseAuth';
 
+import { createEmptyDatabase, DatabaseState } from './lib/mockDatabase';
 import {
-  loadDatabase,
-  saveDatabase,
-  resetDatabaseToDefault,
-  createEmptyDatabase,
-  DatabaseState,
-} from './lib/mockDatabase';
+  loadCompanyFinancialData,
+  migrateLegacyLocalData,
+  clearLegacyLocalDataIfFullyMigrated,
+  insertExpense,
+  updateExpense as updateExpenseInDb,
+  deleteExpense as deleteExpenseInDb,
+  insertRevenueCategory,
+  insertExpenseCategory,
+  updateRevenueCategory,
+  updateExpenseCategory,
+  deleteCategory as deleteCategoryInDb,
+  insertCostCenter,
+  updateCostCenter as updateCostCenterInDb,
+  deleteCostCenter as deleteCostCenterInDb,
+  updateClient as updateClientInDb,
+  deleteClient as deleteClientInDb,
+  upsertBudget,
+  insertBankAccount,
+  updateBankAccount as updateBankAccountInDb,
+  deleteBankAccount as deleteBankAccountInDb,
+} from './lib/financialRepository';
+import { getCurrentYearMonth, getTodayISO } from './lib/utils';
+import { CfoAiView } from './components/analysis/CfoAiView';
 
 import {
   calculateDRE,
@@ -76,6 +94,7 @@ import {
   AccountsPayable,
   PartnerTransaction,
   TransactionStatus,
+  BankAccount,
 } from './types';
 
 export default function App() {
@@ -175,17 +194,16 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Load initial database from storage / seed.
-  // No preview interno, não carregar o localStorage real.
-  const [db, setDb] = useState<DatabaseState>(() =>
-  currentRoute === '/__dev/preview'
-    ? createEmptyDatabase()
-    : loadDatabase()
-  );
+  // Estado em memória dos dados da empresa selecionada.
+  // A fonte da verdade é o Supabase: nada financeiro é salvo no navegador.
+  const [db, setDb] = useState<DatabaseState>(() => createEmptyDatabase());
+  const [isFinancialDataLoading, setIsFinancialDataLoading] = useState<boolean>(false);
+  const [dataNotice, setDataNotice] = useState<string | null>(null);
 
   // Navigation & Filter States
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
-  const [selectedMonth, setSelectedMonth] = useState<string>('2026-08');
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => getCurrentYearMonth());
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState<boolean>(false);
 
   // Unified sync of user context, roles, and organizations
   const syncUserContext = async (userId: string, userEmail?: string, metadata?: any) => {
@@ -356,8 +374,44 @@ export default function App() {
         return;
       }
 
+      // Plano de contas, centros, despesas, orçamento e contas bancárias
+      setIsFinancialDataLoading(true);
+      let fin = await loadCompanyFinancialData(companyId);
+      if (fin.data && requestId === latestLoadRequestIdRef.current && selectedCompanyIdRef.current === companyId) {
+        const mig = await migrateLegacyLocalData(companyId, fin.data);
+        if (mig.migrated > 0) {
+          setDataNotice(
+            `${mig.migrated} lançamento(s) que estavam salvos só neste navegador foram enviados para o banco de dados da empresa.`
+          );
+          fin = await loadCompanyFinancialData(companyId);
+        }
+      }
+      setIsFinancialDataLoading(false);
+      if (fin.error) {
+        setDataNotice('Não foi possível carregar todos os dados financeiros. Atualize a página; se continuar, verifique sua conexão.');
+      }
+
+      if (
+        requestId !== latestLoadRequestIdRef.current ||
+        selectedCompanyIdRef.current !== companyId
+      ) {
+        return;
+      }
+
+      const others = <T extends { company_id: string }>(arr: T[]) => arr.filter((item) => item.company_id !== companyId);
+
       setDb((prev) => ({
         ...prev,
+        ...(fin.data
+          ? {
+              revenueCategories: [...others(prev.revenueCategories), ...fin.data.revenueCategories],
+              expenseCategories: [...others(prev.expenseCategories), ...fin.data.expenseCategories],
+              costCenters: [...others(prev.costCenters), ...fin.data.costCenters],
+              expenses: [...others(prev.expenses), ...fin.data.expenses],
+              budgets: [...others(prev.budgets), ...fin.data.budgets],
+              bankAccounts: [...others(prev.bankAccounts), ...fin.data.bankAccounts],
+            }
+          : {}),
         clients: clientsResult.error
           ? prev.clients
           : [
@@ -517,10 +571,12 @@ export default function App() {
     setIsNewTransactionModalOpen(true);
   };
 
-  // Save to localStorage when db updates
+  // Limpa do navegador a cópia antiga dos dados quando todas as empresas já foram migradas
   useEffect(() => {
-    saveDatabase(db);
-  }, [db]);
+    if (userOrganizations.length > 0) {
+      clearLegacyLocalDataIfFullyMigrated(userOrganizations.map((o) => o.id));
+    }
+  }, [userOrganizations, db.expenses.length]);
 
   // Scoped Data by Company (Multi-Tenant Isolation)
   const currentCompany: Company = useMemo(() => {
@@ -583,9 +639,29 @@ export default function App() {
     [db.partnerTransactions, selectedCompanyId]
   );
 
+  const companyRevenueCategories = useMemo(
+    () => db.revenueCategories.filter((c) => c.company_id === selectedCompanyId),
+    [db.revenueCategories, selectedCompanyId]
+  );
+
+  const companyExpenseCategories = useMemo(
+    () => db.expenseCategories.filter((c) => c.company_id === selectedCompanyId),
+    [db.expenseCategories, selectedCompanyId]
+  );
+
+  const companyBankAccounts = useMemo(
+    () => db.bankAccounts.filter((b) => b.company_id === selectedCompanyId),
+    [db.bankAccounts, selectedCompanyId]
+  );
+
+  const companyBudgets = useMemo(
+    () => db.budgets.filter((b) => b.company_id === selectedCompanyId),
+    [db.budgets, selectedCompanyId]
+  );
+
   // Categories list unified
   const allCategories: Category[] = useMemo(() => {
-    const revCats: Category[] = db.revenueCategories.map((rc) => ({
+    const revCats: Category[] = companyRevenueCategories.map((rc) => ({
       id: rc.id,
       company_id: rc.company_id,
       name: rc.name,
@@ -594,7 +670,7 @@ export default function App() {
       group: 'revenue',
       active: rc.active,
     }));
-    const expCats: Category[] = db.expenseCategories.map((ec) => ({
+    const expCats: Category[] = companyExpenseCategories.map((ec) => ({
       id: ec.id,
       company_id: ec.company_id,
       name: ec.name,
@@ -602,33 +678,34 @@ export default function App() {
       code: 'EXP',
       group: ec.group,
       active: ec.active,
+      cost_type: ec.type,
     }));
     return [...revCats, ...expCats];
-  }, [db.revenueCategories, db.expenseCategories]);
+  }, [companyRevenueCategories, companyExpenseCategories]);
 
   // Deterministic Financial Calculations (Source of Truth)
   const currentDRE = useMemo(() => {
     return calculateDRE(
       companyRevenues,
       companyExpenses,
-      db.revenueCategories,
-      db.expenseCategories,
+      companyRevenueCategories,
+      companyExpenseCategories,
       selectedMonth,
       {
         costCenterId: selectedCostCenterId || undefined,
         clientId: selectedClientId || undefined,
       },
-      db.budgets
+      companyBudgets
     );
   }, [
     companyRevenues,
     companyExpenses,
-    db.revenueCategories,
-    db.expenseCategories,
+    companyRevenueCategories,
+    companyExpenseCategories,
     selectedMonth,
     selectedCostCenterId,
     selectedClientId,
-    db.budgets,
+    companyBudgets,
   ]);
 
   // Previous Month DRE for comparison
@@ -642,24 +719,24 @@ export default function App() {
     return calculateDRE(
       companyRevenues,
       companyExpenses,
-      db.revenueCategories,
-      db.expenseCategories,
+      companyRevenueCategories,
+      companyExpenseCategories,
       previousMonthStr,
       {
         costCenterId: selectedCostCenterId || undefined,
         clientId: selectedClientId || undefined,
       },
-      db.budgets
+      companyBudgets
     );
   }, [
     companyRevenues,
     companyExpenses,
-    db.revenueCategories,
-    db.expenseCategories,
+    companyRevenueCategories,
+    companyExpenseCategories,
     previousMonthStr,
     selectedCostCenterId,
     selectedClientId,
-    db.budgets,
+    companyBudgets,
   ]);
 
   // Cash Flow Periods (Daily / Weekly / Monthly)
@@ -668,7 +745,7 @@ export default function App() {
       companyRevenues,
       companyExpenses,
       companyPartnerTransactions,
-      db.bankAccounts,
+      companyBankAccounts,
       cashFlowViewMode,
       selectedMonth
     );
@@ -676,7 +753,7 @@ export default function App() {
     companyRevenues,
     companyExpenses,
     companyPartnerTransactions,
-    db.bankAccounts,
+    companyBankAccounts,
     cashFlowViewMode,
     selectedMonth,
   ]);
@@ -691,8 +768,9 @@ export default function App() {
       companyExpenses,
       companyReceivables,
       companyPayables,
-      db.bankAccounts,
-      db.expenseCategories
+      companyBankAccounts,
+      companyExpenseCategories,
+      getTodayISO()
     );
   }, [
     currentDRE,
@@ -702,9 +780,12 @@ export default function App() {
     companyExpenses,
     companyReceivables,
     companyPayables,
-    db.bankAccounts,
-    db.expenseCategories,
+    companyBankAccounts,
+    companyExpenseCategories,
   ]);
+
+  // Saldo em caixa hoje (mesma regra do card do Dashboard)
+  const currentCashBalance = indicators.cash_balance;
 
   // Client Profitability Matrix
   const clientsProfitability = useMemo(() => {
@@ -733,6 +814,7 @@ export default function App() {
     team: 'Equipe da Empresa',
     settings: 'Configurações & Governança',
     billing: 'Plano e Cobrança',
+    cfo_ai: 'CFO Digital IA',
     admin_panel: 'Painel Global do System Admin',
   };
 
@@ -780,91 +862,47 @@ export default function App() {
 
     const savedRev = data as Revenue;
 
-    setDb((prev) => {
-      const updatedRevenues = [savedRev, ...prev.revenues];
-      const updatedAccounts =
-        normStatus === 'received'
-          ? prev.bankAccounts.map((b, idx) =>
-              idx === 0 ? { ...b, current_balance: b.current_balance + savedRev.net_amount } : b
-            )
-          : prev.bankAccounts;
-      return {
-        ...prev,
-        revenues: updatedRevenues,
-        bankAccounts: updatedAccounts,
-      };
-    });
+    setDb((prev) => ({ ...prev, revenues: [savedRev, ...prev.revenues] }));
     return true;
   };
 
-  const handleAddExpense = (newExp: Omit<Expense, 'id' | 'created_at'>) => {
-    const normStatus = normalizeTransactionStatus(newExp.status);
-    const exp: Expense = {
-      ...newExp,
-      status: normStatus,
-      id: `exp_${Date.now()}`,
-      created_at: new Date().toISOString(),
-    };
-    setDb((prev) => {
-      const updatedExpenses = [exp, ...prev.expenses];
-      const updatedAccounts =
-        normStatus === 'paid'
-          ? prev.bankAccounts.map((b, idx) =>
-              idx === 0 ? { ...b, current_balance: b.current_balance - exp.amount } : b
-            )
-          : prev.bankAccounts;
-      return {
-        ...prev,
-        expenses: updatedExpenses,
-        bankAccounts: updatedAccounts,
-      };
+  const handleAddExpense = async (newExp: Omit<Expense, 'id' | 'created_at'>): Promise<boolean> => {
+    if (!selectedCompanyId) {
+      alert('Nenhuma empresa selecionada para criar despesa.');
+      return false;
+    }
+    const res = await insertExpense({ ...newExp, company_id: selectedCompanyId }, selectedCompanyId);
+    if (res.error || !res.data) {
+      console.error('Erro ao salvar despesa no Supabase:', res.error);
+      alert(`Erro ao salvar despesa: ${res.error}`);
+      return false;
+    }
+    setDb((prev) => ({ ...prev, expenses: [res.data as Expense, ...prev.expenses] }));
+    return true;
+  };
+
+  const handleMarkAsReceived = async (revenueId: string) => {
+    const rev = db.revenues.find((r) => r.id === revenueId);
+    if (!rev) return;
+    const today = getTodayISO();
+    await handleUpdateRevenue({
+      ...rev,
+      status: 'received',
+      received_date: rev.received_date || today,
+      payment_date: rev.payment_date || today,
     });
   };
 
-  const handleMarkAsReceived = (revenueId: string) => {
-    const rev = db.revenues.find((r) => r.id === revenueId);
-    if (!rev) return;
-    const today = new Date().toISOString().slice(0, 10);
-
-    setDb((prev) => ({
-      ...prev,
-      revenues: prev.revenues.map((r) =>
-        r.id === revenueId
-          ? {
-              ...r,
-              status: 'received',
-              received_date: r.received_date || today,
-              payment_date: r.payment_date || today,
-            }
-          : r
-      ),
-      bankAccounts: prev.bankAccounts.map((b, idx) =>
-        idx === 0 ? { ...b, current_balance: b.current_balance + rev.net_amount } : b
-      ),
-    }));
-  };
-
-  const handleMarkAsPaid = (expenseId: string) => {
+  const handleMarkAsPaid = async (expenseId: string) => {
     const exp = db.expenses.find((e) => e.id === expenseId);
     if (!exp) return;
-    const today = new Date().toISOString().slice(0, 10);
-
-    setDb((prev) => ({
-      ...prev,
-      expenses: prev.expenses.map((e) =>
-        e.id === expenseId
-          ? {
-              ...e,
-              status: 'paid',
-              paid_date: e.paid_date || today,
-              payment_date: e.payment_date || today,
-            }
-          : e
-      ),
-      bankAccounts: prev.bankAccounts.map((b, idx) =>
-        idx === 0 ? { ...b, current_balance: b.current_balance - exp.amount } : b
-      ),
-    }));
+    const today = getTodayISO();
+    await handleUpdateExpense({
+      ...exp,
+      status: 'paid',
+      paid_date: exp.paid_date || today,
+      payment_date: exp.payment_date || today,
+    });
   };
 
   const handleUpdateRevenue = async (
@@ -919,11 +957,19 @@ export default function App() {
     return true;
   };
 
-  const handleUpdateExpense = (updatedExp: Expense) => {
+  const handleUpdateExpense = async (updatedExp: Expense): Promise<boolean> => {
+    if (!selectedCompanyId) return false;
+    const res = await updateExpenseInDb(updatedExp, selectedCompanyId);
+    if (res.error || !res.data) {
+      console.error('Erro ao atualizar despesa no Supabase:', res.error);
+      alert(`Erro ao atualizar despesa: ${res.error}`);
+      return false;
+    }
     setDb((prev) => ({
       ...prev,
-      expenses: prev.expenses.map((e) => (e.id === updatedExp.id ? updatedExp : e)),
+      expenses: prev.expenses.map((e) => (e.id === updatedExp.id ? (res.data as Expense) : e)),
     }));
+    return true;
   };
 
   const handleDeleteRevenue = async (
@@ -954,11 +1000,15 @@ export default function App() {
     return true;
   };
 
-  const handleDeleteExpense = (id: string) => {
-    setDb((prev) => ({
-      ...prev,
-      expenses: prev.expenses.filter((e) => e.id !== id),
-    }));
+  const handleDeleteExpense = async (id: string): Promise<boolean> => {
+    if (!selectedCompanyId) return false;
+    const res = await deleteExpenseInDb(id, selectedCompanyId);
+    if (res.error) {
+      alert(`Erro ao excluir despesa: ${res.error}`);
+      return false;
+    }
+    setDb((prev) => ({ ...prev, expenses: prev.expenses.filter((e) => e.id !== id) }));
+    return true;
   };
 
   const handleAddClient = async (
@@ -986,18 +1036,31 @@ export default function App() {
   }));
 };
 
-  const handleUpdateClient = (updatedClient: Client) => {
+  const handleUpdateClient = async (updatedClient: Client) => {
+    if (!selectedCompanyId) return;
+    const res = await updateClientInDb(updatedClient, selectedCompanyId);
+    if (res.error || !res.data) {
+      alert(`Erro ao atualizar cliente: ${res.error}`);
+      return;
+    }
     setDb((prev) => ({
       ...prev,
-      clients: prev.clients.map((c) => (c.id === updatedClient.id ? updatedClient : c)),
+      clients: prev.clients.map((c) => (c.id === updatedClient.id ? (res.data as Client) : c)),
     }));
   };
 
-  const handleDeleteClient = (id: string) => {
-    setDb((prev) => ({
-      ...prev,
-      clients: prev.clients.filter((c) => c.id !== id),
-    }));
+  const handleDeleteClient = async (id: string) => {
+    if (!selectedCompanyId) return;
+    const res = await deleteClientInDb(id, selectedCompanyId);
+    if (res.error) {
+      alert(
+        res.error.toLowerCase().includes('foreign key')
+          ? 'Este cliente tem receitas vinculadas. Altere o status para "Cancelado" em vez de excluir.'
+          : `Erro ao excluir cliente: ${res.error}`
+      );
+      return;
+    }
+    setDb((prev) => ({ ...prev, clients: prev.clients.filter((c) => c.id !== id) }));
   };
 
   const handleAddProduct = async (
@@ -1087,70 +1150,43 @@ export default function App() {
     }));
   };
 
-  const handleAddCostCenter = async (
-    ccData: Omit<CostCenter, 'id'>
-  ) => {
-    try {
-      if (!selectedCompanyId) {
-        console.warn('Nenhuma empresa selecionada para inclusão do centro de resultado.');
-        return;
-      }
-
-      let createdId = `cc_${Date.now()}`;
-
-      try {
-        const { data, error } = await supabase
-          .from('cost_centers')
-          .insert({
-            company_id: selectedCompanyId,
-            name: ccData.name,
-            code: ccData.code || null,
-          })
-          .select()
-          .single();
-
-        if (!error && data?.id) {
-          createdId = data.id;
-        } else if (error) {
-          console.warn('Persistindo centro de resultado localmente devido a restrição do banco:', error);
-        }
-      } catch (sbErr) {
-        console.warn('Supabase indisponível para cost_centers, operando com armazenamento local:', sbErr);
-      }
-
-      const newCC: CostCenter = {
-        ...ccData,
-        id: createdId,
-        company_id: selectedCompanyId,
-      };
-
-      setDb((prev) => ({
-        ...prev,
-        costCenters: [
-          ...prev.costCenters,
-          newCC,
-        ],
-      }));
-    } catch (err) {
-      console.error(
-        'Erro inesperado ao criar centro de resultado:',
-        err
-      );
+  const handleAddCostCenter = async (ccData: Omit<CostCenter, 'id'>) => {
+    if (!selectedCompanyId) return;
+    const res = await insertCostCenter(ccData, selectedCompanyId);
+    if (res.error || !res.data) {
+      alert(`Erro ao criar centro de resultado: ${res.error}`);
+      return;
     }
+    setDb((prev) => ({ ...prev, costCenters: [...prev.costCenters, res.data as CostCenter] }));
   };
 
-const handleUpdateCostCenter = (cc: CostCenter) => {
+  const handleUpdateCostCenter = async (cc: CostCenter) => {
+    if (!selectedCompanyId) return;
+    const res = await updateCostCenterInDb(cc, selectedCompanyId);
+    if (res.error || !res.data) {
+      alert(`Erro ao atualizar centro de resultado: ${res.error}`);
+      return;
+    }
     setDb((prev) => ({
       ...prev,
-      costCenters: prev.costCenters.map((c) => (c.id === cc.id ? cc : c)),
+      costCenters: prev.costCenters.map((c) => (c.id === cc.id ? (res.data as CostCenter) : c)),
     }));
   };
 
-  const handleDeleteCostCenter = (id: string) => {
-    setDb((prev) => ({
-      ...prev,
-      costCenters: prev.costCenters.filter((c) => c.id !== id),
-    }));
+  const handleDeleteCostCenter = async (id: string) => {
+    if (!selectedCompanyId) return;
+    const inUse =
+      db.revenues.some((r) => r.cost_center_id === id) || db.expenses.some((e) => e.cost_center_id === id);
+    if (inUse) {
+      alert('Este centro de resultado tem lançamentos vinculados. Desative-o em vez de excluir.');
+      return;
+    }
+    const res = await deleteCostCenterInDb(id, selectedCompanyId);
+    if (res.error) {
+      alert(`Erro ao excluir centro de resultado: ${res.error}`);
+      return;
+    }
+    setDb((prev) => ({ ...prev, costCenters: prev.costCenters.filter((c) => c.id !== id) }));
   };
 
   const handleAddPartner = async (
@@ -1252,98 +1288,82 @@ const handleUpdateCostCenter = (cc: CostCenter) => {
     return true;
   };
 
-  const handleAddCategory = (catData: Omit<Category, 'id'>) => {
-    const id = `cat_${Date.now()}`;
-    const companyId = catData.company_id || selectedCompanyId;
-    const isRevenueCategory =
-      catData.group === 'revenue' || catData.type === 'REVENUE';
+  const isRevenueCategoryData = (cat: { group?: string; type?: string }) =>
+    cat.group === 'revenue' || cat.type === 'REVENUE';
 
-    setDb((prev) => {
-      if (isRevenueCategory) {
-        const newRevenueCategory: RevenueCategory = {
-          id,
-          company_id: companyId,
-          name: catData.name,
-          type: (catData.type as any) || 'services',
-          active: catData.active ?? true,
-        };
-
-        return {
-          ...prev,
-          revenueCategories: [...prev.revenueCategories, newRevenueCategory],
-        };
-      }
-
-      const newExpenseCategory: ExpenseCategory = {
-        id,
-        company_id: companyId,
+  const handleAddCategory = async (catData: Omit<Category, 'id'>) => {
+    const companyId = selectedCompanyId;
+    if (!companyId) return;
+    if (isRevenueCategoryData(catData)) {
+      const res = await insertRevenueCategory({ name: catData.name, type: 'services', active: catData.active }, companyId);
+      if (res.error || !res.data) return alert(`Erro ao criar conta: ${res.error}`);
+      setDb((prev) => ({ ...prev, revenueCategories: [...prev.revenueCategories, res.data as RevenueCategory] }));
+      return;
+    }
+    const res = await insertExpenseCategory(
+      {
         name: catData.name,
         group: (catData.group as ExpenseGroup) || 'operational',
-        type: (catData.type as any) || 'fixed',
-        active: catData.active ?? true,
-      };
-
-      return {
-        ...prev,
-        expenseCategories: [...prev.expenseCategories, newExpenseCategory],
-      };
-    });
+        type: (catData as any).cost_type || 'fixed',
+        active: catData.active,
+      },
+      companyId
+    );
+    if (res.error || !res.data) return alert(`Erro ao criar conta: ${res.error}`);
+    setDb((prev) => ({ ...prev, expenseCategories: [...prev.expenseCategories, res.data as ExpenseCategory] }));
   };
 
-  const handleUpdateCategory = (updatedCat: Category) => {
-    const companyId = updatedCat.company_id || selectedCompanyId;
-    const isRevenueCategory =
-      updatedCat.group === 'revenue' || updatedCat.type === 'REVENUE';
-
-    setDb((prev) => {
-      if (isRevenueCategory) {
-        const revenueCategory: RevenueCategory = {
-          id: updatedCat.id,
-          company_id: companyId,
-          name: updatedCat.name,
-          type: (updatedCat.type as any) || 'services',
-          active: updatedCat.active ?? true,
-        };
-
-        return {
-          ...prev,
-          revenueCategories: prev.revenueCategories.some((c) => c.id === updatedCat.id)
-            ? prev.revenueCategories.map((c) =>
-                c.id === updatedCat.id ? revenueCategory : c
-              )
-            : [...prev.revenueCategories, revenueCategory],
-          expenseCategories: prev.expenseCategories.filter(
-            (c) => c.id !== updatedCat.id
-          ),
-        };
-      }
-
-      const expenseCategory: ExpenseCategory = {
-        id: updatedCat.id,
-        company_id: companyId,
-        name: updatedCat.name,
-        group: (updatedCat.group as ExpenseGroup) || 'operational',
-        type: (updatedCat.type as any) || 'fixed',
-        active: updatedCat.active ?? true,
-      };
-
-      return {
+  const handleUpdateCategory = async (updatedCat: Category) => {
+    const companyId = selectedCompanyId;
+    if (!companyId) return;
+    const wasRevenue = db.revenueCategories.some((c) => c.id === updatedCat.id);
+    if (wasRevenue !== isRevenueCategoryData(updatedCat)) {
+      alert('Não é possível transformar uma conta de receita em despesa (ou o contrário). Crie uma nova conta.');
+      return;
+    }
+    if (wasRevenue) {
+      const current = db.revenueCategories.find((c) => c.id === updatedCat.id)!;
+      const next: RevenueCategory = { ...current, name: updatedCat.name, active: updatedCat.active ?? true };
+      const res = await updateRevenueCategory(next, companyId);
+      if (res.error) return alert(`Erro ao atualizar conta: ${res.error}`);
+      setDb((prev) => ({
         ...prev,
-        expenseCategories: prev.expenseCategories.some(
-          (c) => c.id === updatedCat.id
-        )
-          ? prev.expenseCategories.map((c) =>
-              c.id === updatedCat.id ? expenseCategory : c
-            )
-          : [...prev.expenseCategories, expenseCategory],
-        revenueCategories: prev.revenueCategories.filter(
-          (c) => c.id !== updatedCat.id
-        ),
-      };
-    });
+        revenueCategories: prev.revenueCategories.map((c) => (c.id === next.id ? next : c)),
+      }));
+      return;
+    }
+    const current = db.expenseCategories.find((c) => c.id === updatedCat.id);
+    if (!current) return;
+    const next: ExpenseCategory = {
+      ...current,
+      name: updatedCat.name,
+      group: ((updatedCat.group as ExpenseGroup) || current.group) as ExpenseGroup,
+      active: updatedCat.active ?? true,
+    };
+    const res = await updateExpenseCategory(next, companyId);
+    if (res.error) return alert(`Erro ao atualizar conta: ${res.error}`);
+    setDb((prev) => ({
+      ...prev,
+      expenseCategories: prev.expenseCategories.map((c) => (c.id === next.id ? next : c)),
+    }));
   };
 
-  const handleDeleteCategory = (catId: string) => {
+  const handleDeleteCategory = async (catId: string) => {
+    const companyId = selectedCompanyId;
+    if (!companyId) return;
+    const kind = db.revenueCategories.some((c) => c.id === catId) ? 'revenue' : 'expense';
+    const res = await deleteCategoryInDb(catId, kind, companyId);
+    if (!res.data) return alert(`Erro ao excluir conta: ${res.error}`);
+    if (res.error) {
+      // Desativada porque tinha lançamentos
+      alert(res.error);
+      setDb((prev) => ({
+        ...prev,
+        revenueCategories: prev.revenueCategories.map((c) => (c.id === catId ? { ...c, active: false } : c)),
+        expenseCategories: prev.expenseCategories.map((c) => (c.id === catId ? { ...c, active: false } : c)),
+      }));
+      return;
+    }
     setDb((prev) => ({
       ...prev,
       revenueCategories: prev.revenueCategories.filter((c) => c.id !== catId),
@@ -1351,13 +1371,19 @@ const handleUpdateCostCenter = (cc: CostCenter) => {
     }));
   };
 
-  const handleRecordProfitDistribution = (partnerId: string, amount: number, date: string) => {
+  const handleRecordProfitDistribution = async (partnerId: string, amount: number, date: string) => {
     const partner = db.partners.find((p) => p.id === partnerId);
-    const exp: Expense = {
-      id: `exp_dist_${Date.now()}`,
+    const equityCategory =
+      companyExpenseCategories.find((c) => c.group === 'equity' && /distribui/i.test(c.name)) ||
+      companyExpenseCategories.find((c) => c.group === 'equity');
+    if (!equityCategory) {
+      alert('Crie uma conta do grupo "Movimentação de Sócios" no Plano de Contas para registrar a distribuição.');
+      return;
+    }
+    await handleAddExpense({
       company_id: selectedCompanyId,
-      category_id: 'ec_distribuicao_lucros',
-      cost_center_id: 'cc_adm',
+      category_id: equityCategory.id,
+      cost_center_id: undefined,
       supplier: partner ? partner.name : 'Sócio',
       description: `Distribuição de Lucros / Dividendos - ${partner ? partner.name : 'Sócio'}`,
       amount,
@@ -1365,47 +1391,66 @@ const handleUpdateCostCenter = (cc: CostCenter) => {
       competence_date: date,
       due_date: date,
       paid_date: date,
+      payment_date: date,
       status: 'paid',
-      is_equity_movement: true, // Crucial: separated from operational DRE
-      created_at: new Date().toISOString(),
-    };
+      is_equity_movement: true, // fora da DRE operacional
+    });
+  };
 
-    const pTransaction: PartnerTransaction = {
-      id: `pt_${Date.now()}`,
-      company_id: selectedCompanyId,
-      partner_id: partnerId,
-      type: 'profit_distribution',
-      description: `Distribuição de Lucros - ${partner?.name || 'Sócio'}`,
-      amount,
-      date,
-    };
-
+  const handleSaveBudget = async (budget: Budget) => {
+    if (!selectedCompanyId) return;
+    const res = await upsertBudget(budget, selectedCompanyId);
+    if (res.error || !res.data) {
+      alert(`Erro ao salvar meta de orçamento: ${res.error}`);
+      return;
+    }
+    const saved = res.data;
     setDb((prev) => ({
       ...prev,
-      expenses: [exp, ...prev.expenses],
-      partnerTransactions: [pTransaction, ...prev.partnerTransactions],
-      bankAccounts: prev.bankAccounts.map((b, idx) =>
-        idx === 0 ? { ...b, current_balance: b.current_balance - amount } : b
-      ),
+      budgets: [
+        ...prev.budgets.filter(
+          (b) => !(b.company_id === saved.company_id && b.category_id === saved.category_id && (b.year_month || b.reference_month) === saved.year_month)
+        ),
+        saved,
+      ],
     }));
   };
 
-  const handleSaveBudget = (budget: Budget) => {
-    setDb((prev) => {
-      const exists = prev.budgets.find(
-        (b) => b.category_id === budget.category_id && (b.year_month === budget.year_month || b.reference_month === budget.year_month)
-      );
-      if (exists) {
-        return {
-          ...prev,
-          budgets: prev.budgets.map((b) => (b.id === exists.id ? budget : b)),
-        };
-      }
-      return {
-        ...prev,
-        budgets: [...prev.budgets, budget],
-      };
-    });
+  // Contas bancárias (saldo inicial do caixa)
+  const handleAddBankAccount = async (acc: { name: string; bank?: string; opening_balance: number }) => {
+    if (!selectedCompanyId) return false;
+    const res = await insertBankAccount(acc, selectedCompanyId);
+    if (res.error || !res.data) {
+      alert(`Erro ao salvar conta bancária: ${res.error}`);
+      return false;
+    }
+    setDb((prev) => ({ ...prev, bankAccounts: [...prev.bankAccounts, res.data as BankAccount] }));
+    return true;
+  };
+
+  const handleUpdateBankAccount = async (acc: BankAccount) => {
+    if (!selectedCompanyId) return false;
+    const res = await updateBankAccountInDb(acc, selectedCompanyId);
+    if (res.error || !res.data) {
+      alert(`Erro ao atualizar conta bancária: ${res.error}`);
+      return false;
+    }
+    setDb((prev) => ({
+      ...prev,
+      bankAccounts: prev.bankAccounts.map((b) => (b.id === acc.id ? (res.data as BankAccount) : b)),
+    }));
+    return true;
+  };
+
+  const handleDeleteBankAccount = async (id: string) => {
+    if (!selectedCompanyId) return false;
+    const res = await deleteBankAccountInDb(id, selectedCompanyId);
+    if (res.error) {
+      alert(`Erro ao excluir conta bancária: ${res.error}`);
+      return false;
+    }
+    setDb((prev) => ({ ...prev, bankAccounts: prev.bankAccounts.filter((b) => b.id !== id) }));
+    return true;
   };
 
   // Company Management Handlers
@@ -1591,7 +1636,6 @@ const handleUpdateCostCenter = (cc: CostCenter) => {
           : [...(prev.users || []), updatedUser],
         currentUser: prev.currentUser?.id === updatedUser.id ? updatedUser : prev.currentUser,
       };
-      saveDatabase(nextDb);
       return nextDb;
     });
 
@@ -1642,57 +1686,93 @@ const handleUpdateCostCenter = (cc: CostCenter) => {
     }));
   };
 
-  const handleResetDatabase = () => {
-    const fresh = resetDatabaseToDefault();
-    setDb(fresh);
+  // Recarrega do banco os dados da empresa selecionada
+  const handleReloadCompanyData = () => {
+    if (selectedCompanyId) {
+      loadCompanyManagementData(selectedCompanyId);
+      loadCompanyRevenues(selectedCompanyId);
+    }
   };
 
-  const handleImportCSV = (type: 'revenues' | 'expenses', csvContent: string) => {
-    const lines = csvContent.split('\n');
-    lines.forEach((line) => {
-      const parts = line.split(';').map((p) => p.trim());
-      if (parts.length >= 2) {
-        const description = parts[0];
-        const amount = parseFloat(parts[1].replace('R$', '').replace('.', '').replace(',', '.')) || 1000;
-        const compDate = parts[2] || `${selectedMonth}-01`;
-        const dueDate = parts[3] || `${selectedMonth}-10`;
+  const handleImportCSV = async (type: 'revenues' | 'expenses', csvContent: string) => {
+    const lines = csvContent.split(/\r?\n/).filter((l) => l.trim());
+    const defaultRevCat =
+      companyRevenueCategories.find((c) => c.active !== false && c.type === 'services') ||
+      companyRevenueCategories.find((c) => c.active !== false);
+    const defaultExpCat =
+      companyExpenseCategories.find((c) => c.active !== false && c.group === 'operational') ||
+      companyExpenseCategories.find((c) => c.active !== false && c.group !== 'equity');
+    const defaultCC = companyCostCenters.find((c) => c.active !== false);
+    const parseBRL = (v: string) => {
+      const n = parseFloat(v.replace(/R\$|\s/g, '').replace(/\./g, '').replace(',', '.'));
+      return isFinite(n) ? n : NaN;
+    };
+    const parseDate = (v: string | undefined, fallback: string) => {
+      if (!v) return fallback;
+      const t = v.trim();
+      const br = t.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+      return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : fallback;
+    };
 
-        if (type === 'revenues') {
-          const taxAmt = amount * 0.06;
-          const commAmt = amount * 0.05;
-          handleAddRevenue({
-            company_id: selectedCompanyId,
-            description,
-            cost_center_id: companyCostCenters[0]?.id || 'cc_trafego',
-            category_id: 'rc_recorrente',
-            gross_amount: amount,
-            tax_amount: taxAmt,
-            commission_amount: commAmt,
-            other_deductions: 0,
-            net_amount: amount - taxAmt - commAmt,
-            competence_date: compDate,
-            due_date: dueDate,
-            status: 'received',
-            received_date: compDate,
-          });
-        } else {
-          handleAddExpense({
-            company_id: selectedCompanyId,
-            description,
-            supplier: 'Fornecedor Importado',
-            cost_center_id: companyCostCenters[0]?.id || 'cc_trafego',
-            category_id: 'ec_freelancers',
-            amount,
-            cost_nature: 'FIXED',
-            competence_date: compDate,
-            due_date: dueDate,
-            status: 'paid',
-            paid_date: compDate,
-            is_equity_movement: false,
-          });
-        }
+    let ok = 0;
+    let skipped = 0;
+    for (const line of lines) {
+      const parts = line.split(';').map((p) => p.trim());
+      if (parts.length < 2) {
+        skipped++;
+        continue;
       }
-    });
+      const description = parts[0];
+      const amount = parseBRL(parts[1]);
+      if (!description || !isFinite(amount) || amount <= 0) {
+        skipped++; // linha de cabeçalho ou valor inválido
+        continue;
+      }
+      const compDate = parseDate(parts[2], `${selectedMonth}-01`);
+      const dueDate = parseDate(parts[3], compDate);
+
+      if (type === 'revenues') {
+        if (!defaultRevCat) break;
+        const saved = await handleAddRevenue({
+          company_id: selectedCompanyId,
+          description,
+          cost_center_id: defaultCC?.id,
+          category_id: defaultRevCat.id,
+          gross_amount: amount,
+          tax_amount: 0,
+          commission_amount: 0,
+          other_deductions: 0,
+          net_amount: amount,
+          competence_date: compDate,
+          due_date: dueDate,
+          status: 'pending',
+        });
+        if (saved) ok++;
+        else skipped++;
+      } else {
+        if (!defaultExpCat) break;
+        const saved = await handleAddExpense({
+          company_id: selectedCompanyId,
+          description,
+          supplier: '',
+          cost_center_id: defaultCC?.id,
+          category_id: defaultExpCat.id,
+          amount,
+          cost_nature: 'FIXED',
+          competence_date: compDate,
+          due_date: dueDate,
+          status: 'pending',
+          is_equity_movement: false,
+        });
+        if (saved) ok++;
+        else skipped++;
+      }
+    }
+    alert(
+      `Importação concluída: ${ok} lançamento(s) importado(s)${skipped ? `, ${skipped} linha(s) ignorada(s)` : ''}. ` +
+        'Eles entraram como pendentes, na categoria padrão: revise categoria e status em cada um.'
+    );
   };
 
   // 0. Modo de Pré-Visualização Interna (/ __dev/preview)
@@ -1893,6 +1973,8 @@ const handleUpdateCostCenter = (cc: CostCenter) => {
           setDb((prev) => ({ ...prev, currentCompanyId: id }));
         }}
         onLogout={handleLogout}
+        isMobileOpen={isMobileNavOpen}
+        onCloseMobile={() => setIsMobileNavOpen(false)}
       />
 
       {/* Main Content Area */}
@@ -1910,10 +1992,40 @@ const handleUpdateCostCenter = (cc: CostCenter) => {
           onLogout={handleLogout}
           onNavigateSettings={() => setCurrentTab('settings')}
           onUpdateUser={handleUpdateUser}
+          onOpenMobileNav={() => setIsMobileNavOpen(true)}
         />
 
         {/* View Router */}
-        <main className="flex-1 overflow-y-auto p-6 bg-[#F1F5F9]">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-6 bg-[#F1F5F9]">
+          {dataNotice && (
+            <div className="mb-4 flex items-start justify-between gap-3 p-3 bg-blue-50 border border-blue-200 text-blue-800 rounded-xl text-xs" role="status">
+              <span>{dataNotice}</span>
+              <button type="button" onClick={() => setDataNotice(null)} className="font-bold text-blue-600 shrink-0" aria-label="Fechar aviso">
+                ✕
+              </button>
+            </div>
+          )}
+          {isFinancialDataLoading && (
+            <div className="mb-4 flex items-center gap-2 text-xs text-slate-500" role="status">
+              <div className="w-3.5 h-3.5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+              Carregando dados da empresa...
+            </div>
+          )}
+
+          {currentTab === 'cfo_ai' && (
+            <CfoAiView
+              companyName={currentCompany.name}
+              selectedMonth={selectedMonth}
+              currentDRE={currentDRE}
+              previousDRE={previousDRE}
+              indicators={indicators}
+              cashFlowPeriods={cashFlowPeriods}
+              alerts={proactiveAlerts}
+              clientsProfitability={clientsProfitability}
+              expenseCategories={companyExpenseCategories}
+              expenses={companyExpenses}
+            />
+          )}
           {currentTab === 'admin_panel' && isSysAdmin && (
             <SystemAdminPanel
               currentUser={currentUser}
@@ -1961,11 +2073,16 @@ const handleUpdateCostCenter = (cc: CostCenter) => {
           {currentTab === 'cashflow' && (
             <CashFlowView
               cashFlowPeriods={cashFlowPeriods}
-              bankAccounts={db.bankAccounts}
+              bankAccounts={companyBankAccounts}
               viewMode={cashFlowViewMode}
               onChangeViewMode={(mode) => setCashFlowViewMode(mode)}
               selectedMonth={selectedMonth}
               onSelectMonth={(m) => setSelectedMonth(m)}
+              currentCashBalance={currentCashBalance}
+              canEdit={currentUserRole !== 'viewer'}
+              onAddBankAccount={handleAddBankAccount}
+              onUpdateBankAccount={handleUpdateBankAccount}
+              onDeleteBankAccount={handleDeleteBankAccount}
             />
           )}
 
@@ -2065,7 +2182,7 @@ const handleUpdateCostCenter = (cc: CostCenter) => {
 
           {currentTab === 'budget' && (
             <BudgetView
-              budgets={db.budgets}
+              budgets={companyBudgets}
               categories={allCategories}
               costCenters={companyCostCenters}
               expenses={companyExpenses}
@@ -2118,7 +2235,7 @@ const handleUpdateCostCenter = (cc: CostCenter) => {
               onAddCategory={handleAddCategory}
               onUpdateCategory={handleUpdateCategory}
               onDeleteCategory={handleDeleteCategory}
-              onResetDatabase={handleResetDatabase}
+              onResetDatabase={handleReloadCompanyData}
               onImportCSV={handleImportCSV}
             />
           )}
@@ -2146,6 +2263,7 @@ const handleUpdateCostCenter = (cc: CostCenter) => {
         defaultStatus={newTransactionDefaultStatus}
         onAddRevenue={handleAddRevenue}
         onAddExpense={handleAddExpense}
+        onManageCategories={() => setCurrentTab('settings')}
       />
 
       {/* Global Edit Transaction Modal */}

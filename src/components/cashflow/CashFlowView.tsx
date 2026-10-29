@@ -10,6 +10,12 @@ import {
   Building2,
   PieChart as PieIcon,
   ChevronRight,
+  Plus,
+  Pencil,
+  Trash2,
+  Info,
+  Check,
+  X,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -25,7 +31,7 @@ import {
   Area,
 } from 'recharts';
 import { CashFlowPeriod, BankAccount } from '../../types';
-import { formatCurrency, formatPercent } from '../../lib/utils';
+import { formatCurrency, formatPercent, formatAxisCurrency, parseDecimalInput, formatDate, getTodayISO } from '../../lib/utils';
 import { MonthPickerFilter } from '../common/MonthPickerFilter';
 
 interface CashFlowViewProps {
@@ -35,7 +41,15 @@ interface CashFlowViewProps {
   onChangeViewMode: (mode: 'daily' | 'weekly' | 'monthly') => void;
   selectedMonth: string;
   onSelectMonth?: (month: string) => void;
+  /** Saldo em caixa hoje (saldo inicial + recebimentos − pagamentos) */
+  currentCashBalance?: number;
+  canEdit?: boolean;
+  onAddBankAccount?: (acc: { name: string; bank?: string; opening_balance: number }) => Promise<boolean>;
+  onUpdateBankAccount?: (acc: BankAccount) => Promise<boolean>;
+  onDeleteBankAccount?: (id: string) => Promise<boolean>;
 }
+
+const emptyAccForm = { name: '', bank: '', opening_balance: '' };
 
 export const CashFlowView: React.FC<CashFlowViewProps> = ({
   cashFlowPeriods,
@@ -44,10 +58,58 @@ export const CashFlowView: React.FC<CashFlowViewProps> = ({
   onChangeViewMode,
   selectedMonth,
   onSelectMonth,
+  currentCashBalance,
+  canEdit = true,
+  onAddBankAccount,
+  onUpdateBankAccount,
+  onDeleteBankAccount,
 }) => {
   const [selectedPeriodKey, setSelectedPeriodKey] = useState<string | null>(null);
+  const [accForm, setAccForm] = useState(emptyAccForm);
+  const [editingAccId, setEditingAccId] = useState<string | null>(null);
+  const [isAccFormOpen, setIsAccFormOpen] = useState(false);
+  const [accSaving, setAccSaving] = useState(false);
 
-  const totalBankBalance = bankAccounts.reduce((sum, b) => sum + b.current_balance, 0);
+  const totalOpening = bankAccounts.filter((b) => b.active !== false).reduce((sum, b) => sum + (b.opening_balance || 0), 0);
+  const totalBankBalance = currentCashBalance ?? totalOpening;
+
+  const openNewAccount = () => {
+    setEditingAccId(null);
+    setAccForm(emptyAccForm);
+    setIsAccFormOpen(true);
+  };
+  const openEditAccount = (b: BankAccount) => {
+    setEditingAccId(b.id);
+    setAccForm({ name: b.name, bank: b.bank || '', opening_balance: String(b.opening_balance ?? 0).replace('.', ',') });
+    setIsAccFormOpen(true);
+  };
+  const saveAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!accForm.name.trim()) return;
+    setAccSaving(true);
+    const opening = parseDecimalInput(accForm.opening_balance);
+    let ok = false;
+    if (editingAccId) {
+      const current = bankAccounts.find((b) => b.id === editingAccId);
+      if (current && onUpdateBankAccount) {
+        ok = await onUpdateBankAccount({ ...current, name: accForm.name.trim(), bank: accForm.bank, opening_balance: opening });
+      }
+    } else if (onAddBankAccount) {
+      ok = await onAddBankAccount({ name: accForm.name.trim(), bank: accForm.bank, opening_balance: opening });
+    }
+    setAccSaving(false);
+    if (ok) {
+      setIsAccFormOpen(false);
+      setAccForm(emptyAccForm);
+      setEditingAccId(null);
+    }
+  };
+  const removeAccount = async (b: BankAccount) => {
+    if (!onDeleteBankAccount) return;
+    if (window.confirm(`Excluir a conta "${b.name}"? O saldo inicial dela deixa de entrar no caixa.`)) {
+      await onDeleteBankAccount(b.id);
+    }
+  };
 
   // Active period details
   const activePeriod =
@@ -121,39 +183,136 @@ export const CashFlowView: React.FC<CashFlowViewProps> = ({
         </div>
       </div>
 
-      {/* Bank Balances Strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Saldo em caixa e contas bancárias */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm flex items-center justify-between">
           <div>
             <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-              Saldo Total Consolidado
+              Saldo em caixa hoje
             </div>
-            <div className="text-xl font-bold text-slate-900 font-heading mt-1">
+            <div className={`text-xl font-bold font-heading mt-1 ${totalBankBalance < 0 ? 'text-rose-600' : 'text-slate-900'}`}>
               {formatCurrency(totalBankBalance)}
             </div>
-            <div className="text-[11px] text-blue-600 font-medium mt-0.5">Disponível em contas</div>
+            <div className="text-[11px] text-slate-500 font-medium mt-0.5">
+              Saldo inicial {formatCurrency(totalOpening)} + recebido − pago até {formatDate(getTodayISO())}
+            </div>
           </div>
           <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600 border border-blue-100">
             <Wallet className="w-5 h-5" />
           </div>
         </div>
 
-        {bankAccounts.map((b) => (
-          <div key={b.id} className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm flex items-center justify-between">
+        <div className="lg:col-span-2 bg-white border border-slate-200 p-4 rounded-xl shadow-sm space-y-3">
+          <div className="flex items-center justify-between gap-2">
             <div>
-              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider truncate">
-                {b.name}
-              </div>
-              <div className="text-lg font-bold text-slate-800 font-heading mt-1">
-                {formatCurrency(b.current_balance)}
-              </div>
-              <div className="text-[10px] text-slate-400 truncate">{b.account_number}</div>
+              <h3 className="text-sm font-bold text-slate-800 font-heading">Contas bancárias e saldo inicial</h3>
+              <p className="text-[11px] text-slate-500">
+                Informe quanto havia em cada conta antes do primeiro lançamento no sistema.
+              </p>
             </div>
-            <div className="p-2 rounded-lg bg-slate-50 text-slate-600 border border-slate-100">
-              <Building2 className="w-4 h-4" />
-            </div>
+            {canEdit && onAddBankAccount && !isAccFormOpen && (
+              <button
+                type="button"
+                onClick={openNewAccount}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shrink-0 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" /> Adicionar conta
+              </button>
+            )}
           </div>
-        ))}
+
+          {bankAccounts.length === 0 && !isAccFormOpen && (
+            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+              <Info className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>
+                Nenhuma conta cadastrada: o caixa começa em R$ 0,00. Cadastre suas contas com o saldo inicial para o saldo,
+                o runway e os alertas ficarem corretos.
+              </span>
+            </div>
+          )}
+
+          {isAccFormOpen && (
+            <form onSubmit={saveAccount} className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs">
+              <div className="sm:col-span-1">
+                <label className="block font-semibold text-slate-700 mb-1">Nome da conta *</label>
+                <input
+                  required
+                  autoFocus
+                  placeholder="Ex: Itaú PJ"
+                  value={accForm.name}
+                  onChange={(e) => setAccForm({ ...accForm, name: e.target.value })}
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Banco</label>
+                <input
+                  placeholder="Ex: Itaú"
+                  value={accForm.bank}
+                  onChange={(e) => setAccForm({ ...accForm, bank: e.target.value })}
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Saldo inicial (R$)</label>
+                <input
+                  inputMode="decimal"
+                  placeholder="Ex: 25.000,00"
+                  value={accForm.opening_balance}
+                  onChange={(e) => setAccForm({ ...accForm, opening_balance: e.target.value })}
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 font-mono"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={accSaving}
+                  className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 text-white font-semibold disabled:opacity-60 cursor-pointer"
+                >
+                  <Check className="w-3.5 h-3.5" /> {accSaving ? 'Salvando...' : 'Salvar'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsAccFormOpen(false)}
+                  aria-label="Cancelar"
+                  className="px-2 py-1.5 rounded-lg bg-slate-200 text-slate-700 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </form>
+          )}
+
+          {bankAccounts.length > 0 && (
+            <div className="divide-y divide-slate-100 border border-slate-100 rounded-lg">
+              {bankAccounts.map((b) => (
+                <div key={b.id} className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-800 truncate">{b.name}</div>
+                      {b.bank && <div className="text-[10px] text-slate-400 truncate">{b.bank}</div>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[10px] text-slate-400 hidden sm:inline">Saldo inicial</span>
+                    <span className="font-mono font-semibold text-slate-700">{formatCurrency(b.opening_balance)}</span>
+                    {canEdit && onUpdateBankAccount && (
+                      <button type="button" onClick={() => openEditAccount(b)} aria-label={`Editar ${b.name}`} className="p-1 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 cursor-pointer">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {canEdit && onDeleteBankAccount && (
+                      <button type="button" onClick={() => removeAccount(b)} aria-label={`Excluir ${b.name}`} className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Cash Flow Main Chart: Inflows vs Outflows and Balance Line */}
@@ -179,10 +338,10 @@ export const CashFlowView: React.FC<CashFlowViewProps> = ({
 
         <div className="h-72 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+            <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="label" stroke="#64748b" fontSize={11} />
-              <YAxis stroke="#64748b" fontSize={11} tickFormatter={(v) => `R$${v / 1000}k`} />
+              <XAxis dataKey="label" stroke="#64748b" fontSize={11} interval={viewMode === 'monthly' ? 0 : 'preserveStartEnd'} />
+              <YAxis stroke="#64748b" fontSize={11} width={78} tickFormatter={(v) => formatAxisCurrency(Number(v))} />
               <Tooltip
                 contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', color: '#0f172a', borderRadius: '8px', fontSize: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                 formatter={(value: any) => [formatCurrency(Number(value)), '']}

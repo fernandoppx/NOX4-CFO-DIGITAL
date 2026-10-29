@@ -21,6 +21,8 @@ import {
   ChevronDown,
   UserPlus,
   LogOut,
+  Sparkles,
+  X,
 } from 'lucide-react';
 import { NoxLogo } from '../brand/NoxLogo';
 import { User, Company } from '../../types';
@@ -41,6 +43,7 @@ export type NavTab =
   | 'team'
   | 'settings'
   | 'billing'
+  | 'cfo_ai'
   | 'admin_panel';
 
 interface SidebarProps {
@@ -55,6 +58,9 @@ interface SidebarProps {
   activeOrganizationId?: string;
   onSelectCompany?: (companyId: string) => void;
   onLogout?: () => void;
+  /** Controle do menu no celular (abre por cima da tela) */
+  isMobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -67,7 +73,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activeOrganizationId,
   onSelectCompany,
   onLogout,
+  isMobileOpen = false,
+  onCloseMobile,
 }) => {
+  const selectTab = (tab: NavTab) => {
+    onSelectTab(tab);
+    onCloseMobile?.();
+  };
   const navSections = [
     ...(isSystemAdmin
       ? [
@@ -88,6 +100,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: 'VISÃO GERAL',
       items: [
         { id: 'dashboard' as NavTab, label: 'Dashboard', icon: LayoutDashboard, badge: 'Executivo' },
+        { id: 'cfo_ai' as NavTab, label: 'CFO Digital IA', icon: Sparkles, badge: 'IA' },
       ],
     },
     {
@@ -133,17 +146,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
     userOrganizations[0]?.name || 'Empresa';
 
   return (
-    <aside className="w-64 bg-[#0F172A] border-r border-slate-800 flex flex-col h-screen select-none shrink-0 text-slate-300">
+    <>
+    {/* Fundo escuro do menu no celular */}
+    {isMobileOpen && (
+      <div
+        className="fixed inset-0 bg-slate-950/60 z-40 lg:hidden"
+        onClick={onCloseMobile}
+        aria-hidden="true"
+      />
+    )}
+    <aside
+      className={`w-64 bg-[#0F172A] border-r border-slate-800 flex flex-col h-screen select-none shrink-0 text-slate-300
+        fixed inset-y-0 left-0 z-50 transform transition-transform duration-200 lg:static lg:translate-x-0
+        ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'}`}
+    >
+      {onCloseMobile && (
+        <button
+          type="button"
+          onClick={onCloseMobile}
+          aria-label="Fechar menu"
+          className="lg:hidden absolute top-3 right-3 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 z-10"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      )}
       {/* Brand Header */}
       <div
         id="sidebar-brand-header"
-        onClick={() => onSelectTab('dashboard')}
+        onClick={() => selectTab('dashboard')}
         role="button"
         tabIndex={0}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            onSelectTab('dashboard');
+            selectTab('dashboard');
           }
         }}
         title="Clique para ir ao Dashboard Executivo"
@@ -152,7 +188,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <NoxLogo
         size="sm"
         showSubtitle={true}
-        onClick={() => onSelectTab('dashboard')}
+        onClick={() => selectTab('dashboard')}
         className="transition-transform group-hover:scale-[1.02] max-w-full"
   />
       </div>
@@ -172,7 +208,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <button
                     key={item.id}
                     id={`nav-btn-${item.id}`}
-                    onClick={() => onSelectTab(item.id)}
+                    onClick={() => selectTab(item.id)}
                     className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition-all group ${
                       isActive
                         ? 'bg-blue-600/15 text-blue-400 font-semibold'
@@ -323,6 +359,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
     </aside>
+    </>
   );
 };
 

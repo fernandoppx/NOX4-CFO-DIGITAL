@@ -32,7 +32,7 @@ import {
   Area,
 } from 'recharts';
 import { DREStatement, FinancialIndicators, CashFlowPeriod, Client } from '../../types';
-import { formatCurrency, formatPercent } from '../../lib/utils';
+import { formatCurrency, formatPercent, getCurrentYearMonth, formatAxisCurrency } from '../../lib/utils';
 import { MonthPickerFilter } from '../common/MonthPickerFilter';
 
 interface ExecutiveDashboardProps {
@@ -65,7 +65,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   cashFlowPeriods,
   alerts,
   clientsProfitability,
-  selectedMonth = '2026-08',
+  selectedMonth = getCurrentYearMonth(),
   onSelectMonth,
   onNavigateToTab,
 }) => {
@@ -148,11 +148,17 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
       id: 'kpi-saldo-caixa',
       title: 'Saldo Total em Caixa',
       value: formatCurrency(indicators.cash_balance),
-      subtext: `Runway: ${indicators.runway_months.toFixed(0)} meses`,
+      subtext:
+        indicators.runway_months === null
+          ? 'Sem queima de caixa no mês'
+          : `Runway: ${indicators.runway_months.toFixed(1).replace('.', ',')} meses`,
       icon: Wallet,
       color: 'text-cyan-400',
-      trend: `${indicators.runway_months.toFixed(0)}m runway`,
-      isPositive: indicators.runway_months >= 6,
+      trend:
+        indicators.runway_months === null
+          ? 'Sem queima'
+          : `${indicators.runway_months.toFixed(1).replace('.', ',')}m runway`,
+      isPositive: indicators.runway_months === null ? indicators.cash_balance >= 0 : indicators.runway_months >= 6,
     },
     {
       id: 'kpi-receber',
@@ -357,7 +363,10 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                     Liquidez & Runway
                   </p>
                   <p className="text-slate-200">
-                    Saldo disponível de {formatCurrency(indicators.cash_balance)}. Runway operacional estimado em {indicators.runway_months > 0 ? `${indicators.runway_months.toFixed(0)} meses` : 'N/A'}.
+                    Saldo disponível de {formatCurrency(indicators.cash_balance)}.{' '}
+                    {indicators.runway_months === null
+                      ? 'A empresa não está queimando caixa neste mês.'
+                      : `Runway operacional estimado em ${indicators.runway_months.toFixed(1).replace('.', ',')} meses.`}
                   </p>
                 </div>
               </div>
@@ -466,8 +475,8 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="name" stroke="#64748b" fontSize={11} />
-                <YAxis stroke="#64748b" fontSize={11} tickFormatter={(v) => `R$${v / 1000}k`} />
+                <XAxis dataKey="name" stroke="#64748b" fontSize={11} interval={0} />
+                <YAxis stroke="#64748b" fontSize={11} width={78} tickFormatter={(v) => formatAxisCurrency(Number(v))} />
                 <Tooltip
                   contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', color: '#0f172a', borderRadius: '8px', fontSize: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                   formatter={(value: any) => [formatCurrency(Number(value)), '']}
@@ -565,8 +574,8 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="period" stroke="#64748b" fontSize={11} />
-                <YAxis stroke="#64748b" fontSize={11} tickFormatter={(v) => `R$${v / 1000}k`} />
+                <XAxis dataKey="period" stroke="#64748b" fontSize={11} interval={0} />
+                <YAxis stroke="#64748b" fontSize={11} width={78} tickFormatter={(v) => formatAxisCurrency(Number(v))} />
                 <Tooltip
                   contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', color: '#0f172a', borderRadius: '8px', fontSize: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                   formatter={(value: any) => [formatCurrency(Number(value)), '']}
@@ -601,19 +610,46 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                 <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Inadimplência</p>
               </div>
               <div className="flex flex-col items-center justify-center px-2 text-center">
-                <p className="text-2xl font-bold text-slate-900 font-heading">14d</p>
+                <p className="text-2xl font-bold text-slate-900 font-heading">
+                  {indicators.pmr_days === null || indicators.pmr_days === undefined ? '—' : `${indicators.pmr_days}d`}
+                </p>
                 <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">PMR (Recebimento)</p>
               </div>
               <div className="flex flex-col items-center justify-center border-l border-slate-200 px-2 text-center">
-                <p className="text-2xl font-bold text-emerald-600 font-heading">98.1</p>
-                <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Score Saúde</p>
+                <p
+                  className={`text-2xl font-bold font-heading ${
+                    indicators.health_score === null || indicators.health_score === undefined
+                      ? 'text-slate-400'
+                      : indicators.health_score >= 70
+                      ? 'text-emerald-600'
+                      : indicators.health_score >= 40
+                      ? 'text-amber-600'
+                      : 'text-rose-600'
+                  }`}
+                  title="0 a 100: combina margem líquida, fôlego de caixa e inadimplência"
+                >
+                  {indicators.health_score === null || indicators.health_score === undefined ? '—' : indicators.health_score}
+                </p>
+                <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Score Saúde (0–100)</p>
               </div>
             </div>
           </div>
 
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
-            <span>Payback do CAC: <strong className="text-slate-800 font-mono">1.2 meses</strong></span>
-            <span>LTV/CAC: <strong className="text-emerald-600 font-mono">{indicators.ltv_cac_ratio.toFixed(1)}x</strong></span>
+            <span>
+              Payback do CAC:{' '}
+              <strong className="text-slate-800 font-mono">
+                {indicators.cac_payback_months === null || indicators.cac_payback_months === undefined
+                  ? '—'
+                  : `${indicators.cac_payback_months.toFixed(1).replace('.', ',')} meses`}
+              </strong>
+            </span>
+            <span>
+              LTV/CAC:{' '}
+              <strong className="text-emerald-600 font-mono">
+                {indicators.ltv_cac_ratio > 0 ? `${indicators.ltv_cac_ratio.toFixed(1).replace('.', ',')}x` : '—'}
+              </strong>
+            </span>
           </div>
         </div>
       </div>

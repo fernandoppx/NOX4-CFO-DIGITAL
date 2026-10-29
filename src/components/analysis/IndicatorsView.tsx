@@ -14,7 +14,7 @@ import {
   Info,
 } from 'lucide-react';
 import { FinancialIndicators, DREStatement } from '../../types';
-import { formatCurrency, formatPercent } from '../../lib/utils';
+import { formatCurrency, formatPercent, getCurrentYearMonth } from '../../lib/utils';
 import { MonthPickerFilter } from '../common/MonthPickerFilter';
 
 interface IndicatorsViewProps {
@@ -27,7 +27,7 @@ interface IndicatorsViewProps {
 export const IndicatorsView: React.FC<IndicatorsViewProps> = ({
   indicators,
   currentDRE,
-  selectedMonth = '2026-08',
+  selectedMonth = getCurrentYearMonth(),
   onSelectMonth,
 }) => {
   const indicatorSections = [
@@ -123,9 +123,9 @@ export const IndicatorsView: React.FC<IndicatorsViewProps> = ({
         },
         {
           label: 'Payback do CAC',
-          value: `${indicators.cac_payback_months.toFixed(1)} meses`,
+          value: indicators.cac_payback_months == null ? '—' : `${indicators.cac_payback_months.toFixed(1)} meses`,
           subtext: `Tempo para recuperar o custo de venda`,
-          status: indicators.cac_payback_months <= 6 ? 'EXCELENTE' : 'ATENÇÃO',
+          status: indicators.cac_payback_months == null ? 'NORMAL' : indicators.cac_payback_months <= 6 ? 'EXCELENTE' : 'ATENÇÃO',
           explanation: 'Quantos meses de margem de contribuição pagam o investimento de aquisição.',
         },
       ],
@@ -136,9 +136,16 @@ export const IndicatorsView: React.FC<IndicatorsViewProps> = ({
       cards: [
         {
           label: 'Runway de Caixa',
-          value: `${indicators.runway_months.toFixed(1)} meses`,
+          value: indicators.runway_months === null ? 'Sem queima' : `${indicators.runway_months.toFixed(1)} meses`,
           subtext: `Saldo: ${formatCurrency(indicators.cash_balance)}`,
-          status: indicators.runway_months >= 6 ? 'EXCELENTE' : indicators.runway_months >= 3 ? 'REGULAR' : 'CRÍTICO',
+          status:
+            indicators.runway_months === null
+              ? 'EXCELENTE'
+              : indicators.runway_months >= 6
+              ? 'EXCELENTE'
+              : indicators.runway_months >= 3
+              ? 'REGULAR'
+              : 'CRÍTICO',
           explanation: 'Tempo em meses que a empresa sobrevive sem novas entradas de receita.',
         },
         {
@@ -157,14 +164,14 @@ export const IndicatorsView: React.FC<IndicatorsViewProps> = ({
         },
         {
           label: 'PMR (Prazo Médio Recebimento)',
-          value: `${indicators.pmr_days} dias`,
+          value: indicators.pmr_days == null ? '—' : `${indicators.pmr_days} dias`,
           subtext: `Tempo médio para o cliente pagar`,
           status: 'NORMAL',
           explanation: 'Média de dias entre a emissão da cobrança e a liquidação em conta.',
         },
         {
           label: 'PMP (Prazo Médio Pagamento)',
-          value: `${indicators.pmp_days} dias`,
+          value: indicators.pmp_days == null ? '—' : `${indicators.pmp_days} dias`,
           subtext: `Prazo concedido por fornecedores`,
           status: 'NORMAL',
           explanation: 'Média de dias entre o compromisso e o efetivo pagamento aos fornecedores.',

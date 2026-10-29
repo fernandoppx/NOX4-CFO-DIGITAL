@@ -565,18 +565,96 @@ export function calculateDRE(
 /**
  * Calculates Deterministic Cash Flow (Regime de Caixa)
  */
+/** Saldo inicial somado de todas as contas bancárias ativas. */
+export function getTotalOpeningBalance(bankAccounts: BankAccount[]): number {
+  return (bankAccounts || [])
+    .filter((b) => b.active !== false)
+    .reduce((sum, b) => sum + (Number(b.opening_balance ?? b.initial_balance ?? b.current_balance ?? 0) || 0), 0);
+}
+
+/**
+ * Saldo de caixa em uma data (Regime de Caixa):
+ * saldo inicial das contas + recebimentos − pagamentos (inclui retiradas de sócios)
+ * + aportes registrados, considerando só o que aconteceu até `asOfDate` (inclusive).
+ * É a mesma regra usada no Fluxo de Caixa, para os dois números sempre baterem.
+ */
+export function calculateCashBalance(
+  revenues: Revenue[],
+  expenses: Expense[],
+  bankAccounts: BankAccount[],
+  asOfDate: string,
+  partnerTransactions: PartnerTransaction[] = []
+): number {
+  let balance = getTotalOpeningBalance(bankAccounts);
+  for (const r of revenues || []) {
+    if (!isReceivedStatus(r.status)) continue;
+    const d = getRevenueReceiptDate(r);
+    if (d && d <= asOfDate) balance += r.net_amount ?? r.gross_amount ?? 0;
+  }
+  for (const e of expenses || []) {
+    if (!isPaidStatus(e.status)) continue;
+    const d = getExpensePaymentDate(e);
+    if (d && d <= asOfDate) balance -= e.amount || 0;
+  }
+  for (const pt of partnerTransactions || []) {
+    if (!pt.date || pt.date > asOfDate) continue;
+    if (pt.type === 'capital_contribution') balance += pt.amount || 0;
+  }
+  return balance;
+}
+
+const todayISO = () => {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+};
+
 export function calculateCashFlow(
   revenues: Revenue[],
   expenses: Expense[],
   partnerTransactions: PartnerTransaction[],
   bankAccounts: BankAccount[],
   viewMode: 'daily' | 'weekly' | 'monthly' = 'monthly',
-  targetMonth: string = '2026-08' // YYYY-MM
+  targetMonth: string = todayISO().slice(0, 7) // YYYY-MM
 ): CashFlowPeriod[] {
-  const currentTotalBankOpening = bankAccounts.reduce(
-    (sum, b) => sum + (b.opening_balance ?? b.current_balance ?? 0),
-    0
+  // Saldo de abertura do primeiro período = saldo inicial das contas + tudo que
+  // entrou e saiu antes dele (para o saldo final de cada mês ser o saldo real).
+  const [tY, tM] = targetMonth.split('-').map((x) => parseInt(x, 10));
+  const firstPeriodStart =
+    viewMode === 'monthly'
+      ? (() => {
+          const d = new Date(tY, tM - 1 - 3, 1);
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+        })()
+      : `${targetMonth}-01`;
+  const dayBefore = (() => {
+    const [y, m, d] = firstPeriodStart.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    dt.setUTCDate(dt.getUTCDate() - 1);
+    return dt.toISOString().slice(0, 10);
+  })();
+  const currentTotalBankOpening = calculateCashBalance(
+    revenues,
+    expenses,
+    bankAccounts,
+    dayBefore,
+    partnerTransactions
   );
+
+  // Retiradas/movimentos de sócios lançados como despesa patrimonial saem do caixa
+  // como financiamento (fora do operacional).
+  const isEquityOutflowOn = (e: Expense, matcher: (d: string) => boolean) => {
+    if (!e.is_equity_movement || !isPaidStatus(e.status)) return false;
+    const pDate = getExpensePaymentDate(e);
+    return Boolean(pDate && matcher(pDate));
+  };
 
   // Group by date or month
   if (viewMode === 'monthly') {
@@ -637,6 +715,11 @@ export function calculateCashFlow(
           financing_flows -= (pt.amount || 0); // Outflow
         }
       });
+      expenses
+        .filter((e) => isEquityOutflowOn(e, (d) => d.startsWith(mStr)))
+        .forEach((e) => {
+          financing_flows -= e.amount || 0;
+        });
 
       // Investments (asset purchases, etc.)
       const investment_flows = 0;
@@ -713,6 +796,11 @@ export function calculateCashFlow(
       if (pt.type === 'capital_contribution') financing_flows += (pt.amount || 0);
       if (pt.type === 'profit_distribution' || pt.type === 'capital_withdrawal') financing_flows -= (pt.amount || 0);
     });
+    expenses
+      .filter((e) => isEquityOutflowOn(e, (d) => d === dayStr))
+      .forEach((e) => {
+        financing_flows -= e.amount || 0;
+      });
 
     const net_period_change = net_operational + financing_flows;
     const opening = runningBalance;
@@ -750,7 +838,8 @@ export function calculateIndicators(
   receivables: AccountsReceivable[],
   payables: AccountsPayable[],
   bankAccounts: BankAccount[],
-  expenseCategories: ExpenseCategory[]
+  expenseCategories: ExpenseCategory[],
+  asOfDate: string = todayISO()
 ): FinancialIndicators {
   const net_revenue = currentDRE.net_revenue;
   const gross_revenue = currentDRE.gross_revenue;
@@ -758,7 +847,8 @@ export function calculateIndicators(
 
   // MoM Growth %
   const mom_growth = prev_net > 0 ? ((net_revenue - prev_net) / prev_net) * 100 : 0;
-  const yoy_growth = 18.5; // Benchmark or computed if full year data available
+  // Crescimento anual só é calculado quando o app passa o DRE do mesmo mês do ano anterior.
+  const yoy_growth: number | null = null;
 
   // Margins
   const gross_margin = currentDRE.gross_margin;
@@ -794,8 +884,11 @@ export function calculateIndicators(
     .reduce((sum, r) => sum + (r.net_amount ?? r.gross_amount ?? 0), 0);
   const arr = mrr * 12;
 
-  // Churn Rate
-  const churn_rate = 2.4; // 2.4% standard healthy SaaS/Agency benchmark
+  // Churn: clientes cancelados sobre a base que já foi ativa (sem número inventado)
+  const normStatus = (st: string) => String(st || '').toLowerCase();
+  const churnedClients = clients.filter((c) => ['churned', 'inactive', 'cancelled'].includes(normStatus(c.status)));
+  const everActive = clients.filter((c) => normStatus(c.status) !== 'prospect');
+  const churn_rate = everActive.length > 0 ? (churnedClients.length / everActive.length) * 100 : 0;
 
   // Fixed Costs & Break-even point (Ponto de Equilíbrio)
   const fixed_costs_total = expenses
@@ -813,28 +906,25 @@ export function calculateIndicators(
 
   // Commercial investment / CAC
   const commercialTotal = currentDRE.commercial_expenses;
-  const newClientsInPeriod = Math.max(
-    1,
-    clients.filter((c) => c.contract_start_date?.startsWith(currentDRE.period)).length || 2
-  );
-  const cac = commercialTotal / newClientsInPeriod;
+  const newClientsInPeriod = clients.filter((c) => c.contract_start_date?.startsWith(currentDRE.period)).length;
+  const cac = newClientsInPeriod > 0 ? commercialTotal / newClientsInPeriod : 0;
 
-  // LTV = Ticket Médio * Margem de Contribuição * Tempo de Vida (1 / Churn)
+  // LTV = Ticket Médio * Margem de Contribuição * Tempo de Vida (1 / Churn).
+  // Sem churn medido, assume 24 meses de vida média.
   const lifetimeMonths = churn_rate > 0 ? 100 / churn_rate : 24;
   const ltv = average_ticket * (Math.max(0, contribution_margin) / 100) * lifetimeMonths;
   const ltv_cac_ratio = cac > 0 ? ltv / cac : 0;
 
   // Cash balance, Burn Rate, Runway
-  const cash_balance = bankAccounts.reduce(
-    (sum, b) => sum + (b.current_balance ?? b.opening_balance ?? 0),
-    0
-  );
+  const cash_balance = calculateCashBalance(revenues, expenses, bankAccounts, asOfDate);
   const currentMonthExpenses = expenses.filter(
     (e) => !isCancelledStatus(e.status) && !e.is_equity_movement && e.competence_date && e.competence_date.startsWith(currentDRE.period)
   );
   const burn_rate = currentMonthExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
   const netMonthlyBurn = Math.max(0, burn_rate - net_revenue);
-  const runway_months = netMonthlyBurn > 0 ? cash_balance / netMonthlyBurn : 99;
+  // Runway só existe quando a empresa está queimando caixa. Sem queima: null ("sem queima").
+  const runway_months: number | null =
+    netMonthlyBurn > 0 ? Math.max(0, cash_balance) / netMonthlyBurn : null;
 
   // Cost % distributions
   const payrollTotal = expenses
@@ -853,26 +943,73 @@ export function calculateIndicators(
   const expenses_to_revenue_percent = net_revenue > 0 ? (currentDRE.total_operating_expenses / net_revenue) * 100 : 0;
   const costs_to_revenue_percent = net_revenue > 0 ? (currentDRE.cost_of_services / net_revenue) * 100 : 0;
 
-  // Accounts Payable & Receivable
-  const accounts_receivable_total = (receivables || [])
-    .filter((r) => isPendingStatus(r.status) || isOverdueStatus(r.status))
-    .reduce((sum, r) => sum + (r.amount || 0), 0);
+  // Contas a receber / a pagar: títulos próprios, ou (padrão) as receitas e despesas em aberto.
+  const isOverdueByDate = (status: string, due?: string) =>
+    isOverdueStatus(status) || (isPendingStatus(status) && Boolean(due) && String(due) < asOfDate);
 
-  const accounts_payable_total = (payables || [])
-    .filter((p) => isPendingStatus(p.status) || isOverdueStatus(p.status))
-    .reduce((sum, p) => sum + (p.amount || 0), 0);
+  const openReceivables =
+    receivables && receivables.length > 0
+      ? receivables
+          .filter((r) => isPendingStatus(r.status) || isOverdueStatus(r.status))
+          .map((r) => ({ amount: r.amount || 0, overdue: isOverdueByDate(r.status, r.due_date) }))
+      : revenues
+          .filter((r) => isPendingStatus(r.status) || isOverdueStatus(r.status))
+          .map((r) => ({ amount: r.net_amount ?? r.gross_amount ?? 0, overdue: isOverdueByDate(r.status, r.due_date) }));
 
-  const overdueReceivables = (receivables || [])
-    .filter((r) => isOverdueStatus(r.status))
-    .reduce((sum, r) => sum + (r.amount || 0), 0);
+  const openPayables =
+    payables && payables.length > 0
+      ? payables.filter((p) => isPendingStatus(p.status) || isOverdueStatus(p.status)).map((p) => p.amount || 0)
+      : expenses
+          .filter((e) => !e.is_equity_movement && (isPendingStatus(e.status) || isOverdueStatus(e.status)))
+          .map((e) => e.amount || 0);
+
+  const accounts_receivable_total = openReceivables.reduce((sum, r) => sum + r.amount, 0);
+  const accounts_payable_total = openPayables.reduce((sum, v) => sum + v, 0);
+  const overdueReceivables = openReceivables.filter((r) => r.overdue).reduce((sum, r) => sum + r.amount, 0);
 
   const default_rate_percent =
     accounts_receivable_total > 0 ? (overdueReceivables / accounts_receivable_total) * 100 : 0;
 
-  const cac_payback_months =
-    average_ticket * (Math.max(0, contribution_margin) / 100) > 0
-      ? cac / (average_ticket * (Math.max(0, contribution_margin) / 100))
-      : 1.2;
+  const monthlyContributionPerClient = average_ticket * (Math.max(0, contribution_margin) / 100);
+  const cac_payback_months: number | null =
+    cac > 0 && monthlyContributionPerClient > 0 ? cac / monthlyContributionPerClient : null;
+
+  // Prazos médios (em dias) dos últimos 180 dias: recebimento (PMR) e pagamento (PMP)
+  const daysBetween = (a: string, b: string) =>
+    Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000);
+  const windowStart = (() => {
+    const d = new Date(Date.parse(asOfDate + 'T00:00:00Z'));
+    d.setUTCDate(d.getUTCDate() - 180);
+    return d.toISOString().slice(0, 10);
+  })();
+  const avg = (vals: number[]) => (vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null);
+  const pmrSamples = revenues
+    .filter((r) => isReceivedStatus(r.status) && r.competence_date)
+    .map((r) => ({ from: r.competence_date, to: getRevenueReceiptDate(r) }))
+    .filter((x) => x.to && x.to >= windowStart && x.to <= asOfDate)
+    .map((x) => Math.max(0, daysBetween(x.from, x.to as string)));
+  const pmpSamples = expenses
+    .filter((e) => isPaidStatus(e.status) && !e.is_equity_movement && e.competence_date)
+    .map((e) => ({ from: e.competence_date, to: getExpensePaymentDate(e) }))
+    .filter((x) => x.to && x.to >= windowStart && x.to <= asOfDate)
+    .map((x) => Math.max(0, daysBetween(x.from, x.to as string)));
+  const pmrAvg = avg(pmrSamples);
+  const pmpAvg = avg(pmpSamples);
+
+  // Score de saúde (0–100): margem líquida, fôlego de caixa e inadimplência.
+  const hasActivity = currentDRE.gross_revenue > 0 || burn_rate > 0;
+  let health_score: number | null = null;
+  if (hasActivity) {
+    let score = 50;
+    score += Math.max(-25, Math.min(25, net_margin)); // margem líquida em pontos
+    if (runway_months === null) score += cash_balance > 0 ? 15 : 0;
+    else if (runway_months >= 6) score += 15;
+    else if (runway_months >= 3) score += 5;
+    else score -= 15;
+    const defaultRate = accounts_receivable_total > 0 ? (overdueReceivables / accounts_receivable_total) * 100 : 0;
+    score += defaultRate <= 5 ? 10 : defaultRate <= 15 ? 0 : -10;
+    health_score = Math.round(Math.max(0, Math.min(100, score)));
+  }
 
   return {
     gross_revenue,
@@ -911,8 +1048,9 @@ export function calculateIndicators(
     accounts_receivable_total,
     accounts_payable_total,
     default_rate_percent,
-    pmr_days: 14,
-    pmp_days: 28,
+    pmr_days: pmrAvg === null ? null : Math.round(pmrAvg),
+    pmp_days: pmpAvg === null ? null : Math.round(pmpAvg),
+    health_score,
   };
 }
 
@@ -1115,12 +1253,15 @@ export function generateProactiveAlerts(
   }
 
   // 6. Alerta Crítico de Runway de Caixa
-  if (indicators.runway_months < 3 && indicators.burn_rate > 0) {
+  if (indicators.runway_months !== null && indicators.runway_months < 3 && indicators.burn_rate > 0) {
     alerts.push({
       id: 'alert_runway_critical',
       type: 'cash_risk',
       title: 'Runway de Caixa Crítico',
-      content: `O caixa atual suporta apenas ${indicators.runway_months.toFixed(1)} meses de operação no ritmo atual de queima líquida. Risco elevado de insolvência.`,
+      content:
+        indicators.cash_balance <= 0
+          ? `O saldo de caixa está em R$ ${indicators.cash_balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} e a empresa queima caixa no mês. Cadastre o saldo inicial das contas no Fluxo de Caixa se ele ainda não foi informado.`
+          : `O caixa atual suporta apenas ${indicators.runway_months.toFixed(1)} meses de operação no ritmo atual de queima líquida. Risco elevado de insolvência.`,
       severity: 'CRÍTICO',
       badge: 'Caixa',
     });
@@ -1132,7 +1273,10 @@ export function generateProactiveAlerts(
       id: 'alert_growth_pos',
       type: 'growth',
       title: 'Expansão de Faturamento Positiva',
-      content: `Crescimento de +${indicators.mom_growth.toFixed(1)}% MoM em relação ao período anterior, mantendo runway de ${indicators.runway_months.toFixed(0)} meses.`,
+      content:
+        indicators.runway_months === null
+          ? `Crescimento de +${indicators.mom_growth.toFixed(1)}% MoM em relação ao período anterior, sem queima de caixa no mês.`
+          : `Crescimento de +${indicators.mom_growth.toFixed(1)}% MoM em relação ao período anterior, mantendo runway de ${indicators.runway_months.toFixed(0)} meses.`,
       severity: 'INFO',
       badge: 'Desempenho',
     });

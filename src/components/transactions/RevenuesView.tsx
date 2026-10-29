@@ -18,7 +18,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { Revenue, Client, Product, CostCenter, Category, TransactionStatus } from '../../types';
-import { formatCurrency, formatDate } from '../../lib/utils';
+import { formatCurrency, formatDate, getCurrentYearMonth } from '../../lib/utils';
 import { normalizeTransactionStatus } from '../../lib/financialEngine';
 import { MonthPickerFilter } from '../common/MonthPickerFilter';
 import { formatFinancialErrorMessage, formatNullableText } from '../../lib/financialErrorMessages';
@@ -43,7 +43,7 @@ export const RevenuesView: React.FC<RevenuesViewProps> = ({
   products,
   costCenters,
   categories,
-  selectedMonth = '2026-08',
+  selectedMonth = getCurrentYearMonth(),
   onSelectMonth,
   onOpenNewRevenueModal,
   onEditRevenue,

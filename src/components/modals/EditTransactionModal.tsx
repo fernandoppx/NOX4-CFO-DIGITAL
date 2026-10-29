@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   X,
   TrendingUp,
@@ -15,7 +15,8 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { Revenue, Expense, Client, Product, CostCenter, Category, TransactionStatus } from '../../types';
-import { formatCurrency } from '../../lib/utils';
+import { formatCurrency, getTodayISO, getGroupLabel } from '../../lib/utils';
+import { useEscapeKey } from '../../lib/hooks';
 import { normalizeTransactionStatus } from '../../lib/financialEngine';
 import { formatFinancialErrorMessage } from '../../lib/financialErrorMessages';
 
@@ -29,8 +30,8 @@ interface EditTransactionModalProps {
   costCenters: CostCenter[];
   categories: Category[];
   currentCompanyId: string;
-  onSaveRevenue?: (updatedRevenue: Revenue) => void;
-  onSaveExpense?: (updatedExpense: Expense) => void;
+  onSaveRevenue?: (updatedRevenue: Revenue) => Promise<boolean | void> | boolean | void;
+  onSaveExpense?: (updatedExpense: Expense) => Promise<boolean | void> | boolean | void;
 }
 
 export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
@@ -49,21 +50,18 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const isRevenue = !!revenue;
   const isExpense = !!expense;
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const handleClose = useCallback(() => {
+    if (!isSaving) onClose();
+  }, [isSaving, onClose]);
+  useEscapeKey(isOpen, handleClose);
 
   // Filter categories strictly by type
   const revCategories = useMemo(
     () =>
       categories.filter(
         (c) =>
-          c.type === 'REVENUE' ||
-          c.group === 'revenue' ||
-          c.id.startsWith('rc_') ||
-          (c as any).type === 'services' ||
-          (c as any).type === 'recurring' ||
-          (c as any).type === 'non_recurring' ||
-          (c as any).type === 'products' ||
-          (c as any).type === 'financial' ||
-          (c as any).type === 'other_operational'
+          c.type === 'REVENUE' || c.group === 'revenue'
       ),
     [categories]
   );
@@ -72,20 +70,15 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     () =>
       categories.filter(
         (c) =>
-          c.type !== 'REVENUE' &&
-          c.group !== 'revenue' &&
-          !c.id.startsWith('rc_') &&
-          (c as any).type !== 'services' &&
-          (c as any).type !== 'recurring' &&
-          (c as any).type !== 'products'
+          c.type !== 'REVENUE' && c.group !== 'revenue'
       ),
     [categories]
   );
 
-  const availableRevCategories = revCategories.length > 0 ? revCategories : categories;
-  const availableExpCategories = expCategories.length > 0 ? expCategories : categories;
+  const availableRevCategories = revCategories;
+  const availableExpCategories = expCategories;
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = getTodayISO();
 
   // Revenue form state
   const [revForm, setRevForm] = useState({
@@ -180,7 +173,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const commissionAmount = (revForm.gross_amount * revForm.commission_percent) / 100;
   const netAmount = revForm.gross_amount - taxAmount - commissionAmount - revForm.other_deductions;
 
-  const handleRevenueSubmit = (e: React.FormEvent) => {
+  const handleRevenueSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
@@ -193,6 +186,16 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
 
     if (revForm.gross_amount <= 0) {
       setErrorMessage('O valor da receita deve ser maior que zero.');
+      return;
+    }
+
+    if (revForm.tax_percent < 0 || revForm.tax_percent > 100 || revForm.commission_percent < 0 || revForm.commission_percent > 100) {
+      setErrorMessage('Imposto e comissão precisam estar entre 0% e 100%.');
+      return;
+    }
+
+    if (netAmount < 0) {
+      setErrorMessage('As deduções passam do faturamento. Confira os valores.');
       return;
     }
 
@@ -209,7 +212,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       description: revForm.description.trim(),
       client_id: revForm.client_id || undefined,
       product_id: revForm.product_id || undefined,
-      cost_center_id: revForm.cost_center_id,
+      cost_center_id: revForm.cost_center_id || undefined,
       category_id: categoryId,
       gross_amount: revForm.gross_amount,
       tax_amount: taxAmount,
@@ -224,15 +227,22 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       notes: revForm.notes,
     };
 
+    setIsSaving(true);
     try {
-      onSaveRevenue(updatedRevenue);
+      const ok = await onSaveRevenue(updatedRevenue);
+      if (ok === false) {
+        setErrorMessage('Não foi possível salvar as alterações. Tente de novo.');
+        return;
+      }
       onClose();
     } catch (err) {
       setErrorMessage(formatFinancialErrorMessage(err, 'update', 'revenue'));
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handleExpenseSubmit = (e: React.FormEvent) => {
+  const handleExpenseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
@@ -261,7 +271,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       description: expForm.description.trim(),
       supplier: expForm.supplier.trim() || undefined,
       category_id: categoryId,
-      cost_center_id: expForm.cost_center_id,
+      cost_center_id: expForm.cost_center_id || undefined,
       amount: expForm.amount,
       cost_nature: expForm.cost_nature,
       competence_date: expForm.competence_date,
@@ -273,17 +283,31 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       notes: expForm.notes,
     };
 
+    setIsSaving(true);
     try {
-      onSaveExpense(updatedExpense);
+      const ok = await onSaveExpense(updatedExpense);
+      if (ok === false) {
+        setErrorMessage('Não foi possível salvar as alterações. Tente de novo.');
+        return;
+      }
       onClose();
     } catch (err) {
       setErrorMessage(formatFinancialErrorMessage(err, 'update', 'expense'));
+    } finally {
+      setIsSaving(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-      <div className="bg-white border border-slate-200 rounded-2xl max-w-xl w-full p-6 space-y-5 shadow-2xl overflow-y-auto max-h-[92vh] animate-in fade-in zoom-in-95 duration-150">
+    <div
+      className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
+    >
+      <div className="bg-white border border-slate-200 rounded-t-2xl sm:rounded-2xl max-w-xl w-full p-4 sm:p-6 space-y-5 shadow-2xl overflow-y-auto max-h-[92vh] animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <div className="flex items-center gap-2.5">
@@ -308,7 +332,8 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
 
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
+            aria-label="Fechar"
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -337,7 +362,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">Cliente</label>
                 <select
@@ -371,7 +396,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">Centro de Resultado *</label>
                 <select
@@ -405,7 +430,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
 
             {/* Financial Amounts & Deductions */}
             <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <div>
                   <label className="block text-slate-600 font-semibold mb-1">Faturamento Bruto (R$) *</label>
                   <input
@@ -467,7 +492,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
             </div>
 
             {/* Dates & Status */}
-            <div className={`grid gap-2 ${revForm.status === 'received' ? 'grid-cols-4' : 'grid-cols-3'}`}>
+            <div className={`grid gap-2 grid-cols-2 ${revForm.status === 'received' ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">Competência (DRE)</label>
                 <input
@@ -528,10 +553,11 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
               </button>
               <button
                 type="submit"
-                className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold font-heading shadow-xs transition-all cursor-pointer"
+                disabled={isSaving}
+                className="flex items-center gap-1.5 px-5 py-2 rounded-lg disabled:opacity-60 disabled:cursor-wait bg-blue-600 hover:bg-blue-700 text-white font-bold font-heading shadow-xs transition-all cursor-pointer"
               >
                 <Check className="w-4 h-4 stroke-[2.5]" />
-                <span>Salvar Alterações</span>
+                <span>{isSaving ? 'Salvando...' : 'Salvar Alterações'}</span>
               </button>
             </div>
           </form>
@@ -551,7 +577,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">Fornecedor / Credor</label>
                 <input
@@ -572,14 +598,14 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 >
                   {availableExpCategories.map((cat) => (
                     <option key={cat.id} value={cat.id}>
-                      {cat.name} ({cat.type || cat.group})
+                      {cat.name} ({getGroupLabel(String(cat.group || ''))})
                     </option>
                   ))}
                 </select>
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">Valor (R$) *</label>
                 <input
@@ -641,7 +667,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
             </div>
 
             {/* Dates & Status */}
-            <div className={`grid gap-2 ${expForm.status === 'paid' ? 'grid-cols-4' : 'grid-cols-3'}`}>
+            <div className={`grid gap-2 grid-cols-2 ${expForm.status === 'paid' ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">Competência (DRE)</label>
                 <input
@@ -702,10 +728,11 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
               </button>
               <button
                 type="submit"
-                className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold font-heading shadow-xs transition-all cursor-pointer"
+                disabled={isSaving}
+                className="flex items-center gap-1.5 px-5 py-2 rounded-lg disabled:opacity-60 disabled:cursor-wait bg-rose-600 hover:bg-rose-700 text-white font-bold font-heading shadow-xs transition-all cursor-pointer"
               >
                 <Check className="w-4 h-4 stroke-[2.5]" />
-                <span>Salvar Alterações</span>
+                <span>{isSaving ? 'Salvando...' : 'Salvar Alterações'}</span>
               </button>
             </div>
           </form>

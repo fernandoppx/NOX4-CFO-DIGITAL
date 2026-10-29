@@ -15,7 +15,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { Client, Revenue } from '../../types';
-import { formatCurrency, formatPercent } from '../../lib/utils';
+import { formatCurrency, formatPercent, getTodayISO } from '../../lib/utils';
 import { normalizeTransactionStatus } from '../../lib/financialEngine';
 import {
   formatFinancialErrorMessage,
@@ -111,7 +111,7 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
         document: '',
         email: '',
         phone: '',
-        contract_start_date: '2026-08-01',
+        contract_start_date: getTodayISO(),
         contract_value: 6000,
         mrr: 6000,
         status: 'active',

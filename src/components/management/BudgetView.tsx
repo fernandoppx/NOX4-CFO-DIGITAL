@@ -12,7 +12,7 @@ import {
   DollarSign,
 } from 'lucide-react';
 import { Budget, Category, CostCenter, Expense, Revenue } from '../../types';
-import { formatCurrency, formatPercent } from '../../lib/utils';
+import { formatCurrency, formatPercent, parseDecimalInput } from '../../lib/utils';
 import { MonthPickerFilter } from '../common/MonthPickerFilter';
 
 interface BudgetViewProps {
@@ -37,14 +37,14 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
   onSaveBudget,
 }) => {
   const [editingBudgetCategory, setEditingBudgetCategory] = useState<Category | null>(null);
-  const [budgetInput, setBudgetInput] = useState<number>(0);
+  const [budgetInput, setBudgetInput] = useState<string>('');
 
   // Group expenses by category for current month
   const categoryBudgetData = categories
-    .filter((c) => c.type !== 'REVENUE')
+    .filter((c) => c.type !== 'REVENUE' && c.group !== 'revenue' && c.group !== 'equity' && c.active !== false)
     .map((cat) => {
       const budgetEntry = budgets.find(
-        (b) => b.category_id === cat.id && b.year_month === selectedMonth
+        (b) => b.category_id === cat.id && (b.year_month || b.reference_month) === selectedMonth
       );
       const budgetedAmount = budgetEntry ? budgetEntry.budgeted_amount : 0;
 
@@ -53,13 +53,15 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
           (e) =>
             e.category_id === cat.id &&
             e.competence_date.startsWith(selectedMonth) &&
-            !e.is_equity_movement
+            !e.is_equity_movement &&
+            String(e.status).toLowerCase() !== 'cancelled'
         )
         .reduce((sum, e) => sum + e.amount, 0);
 
       const varianceAmount = budgetedAmount - actualAmount;
       const usagePercent = budgetedAmount > 0 ? (actualAmount / budgetedAmount) * 100 : 0;
-      const isOverBudget = actualAmount > budgetedAmount;
+      const hasBudget = budgetedAmount > 0;
+      const isOverBudget = hasBudget && actualAmount > budgetedAmount;
 
       return {
         category: cat,
@@ -68,6 +70,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
         varianceAmount,
         usagePercent,
         isOverBudget,
+        hasBudget,
         budgetEntry,
       };
     });
@@ -79,7 +82,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
 
   const handleOpenEdit = (item: any) => {
     setEditingBudgetCategory(item.category);
-    setBudgetInput(item.budgetedAmount);
+    setBudgetInput(item.budgetedAmount ? String(item.budgetedAmount).replace('.', ',') : '');
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -87,15 +90,15 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
     if (!editingBudgetCategory) return;
 
     const existing = budgets.find(
-      (b) => b.category_id === editingBudgetCategory.id && b.year_month === selectedMonth
+      (b) => b.category_id === editingBudgetCategory.id && (b.year_month || b.reference_month) === selectedMonth
     );
 
     const newBudget: Budget = {
-      id: existing ? existing.id : `bgt_${Date.now()}`,
-      company_id: 'comp_nox4',
+      id: existing ? existing.id : '',
+      company_id: existing?.company_id || '',
       year_month: selectedMonth,
       category_id: editingBudgetCategory.id,
-      budgeted_amount: budgetInput,
+      budgeted_amount: parseDecimalInput(budgetInput),
       actual_amount: 0,
       created_at: new Date().toISOString(),
     };
@@ -229,7 +232,15 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                   </td>
 
                   <td className="py-3 px-4 text-center">
-                    {item.isOverBudget ? (
+                    {!item.hasBudget ? (
+                      item.actualAmount > 0 ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                          Sem meta
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400">—</span>
+                      )
+                    ) : item.isOverBudget ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
                         <AlertTriangle className="w-3 h-3" /> Estourado
                       </span>
@@ -274,11 +285,12 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">Teto Orçado (R$)</label>
                 <input
-                  type="number"
-                  step="100"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="Ex: 3.000,00"
                   required
                   value={budgetInput}
-                  onChange={(e) => setBudgetInput(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => setBudgetInput(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-500 focus:bg-white font-mono text-sm"
                 />
               </div>

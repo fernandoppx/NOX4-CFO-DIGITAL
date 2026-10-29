@@ -15,7 +15,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { Partner, Expense } from '../../types';
-import { formatCurrency, formatPercent } from '../../lib/utils';
+import { formatCurrency, formatPercent, getTodayISO } from '../../lib/utils';
 import {
   formatFinancialErrorMessage,
   formatNullableText,
@@ -58,7 +58,7 @@ export const PartnersView: React.FC<PartnersViewProps> = ({
 
   const [selectedPartnerId, setSelectedPartnerId] = useState(partners[0]?.id || '');
   const [distAmount, setDistAmount] = useState(10000);
-  const [distDate, setDistDate] = useState('2026-08-15');
+  const [distDate, setDistDate] = useState(() => getTodayISO());
 
   const [partnerFormData, setPartnerFormData] = useState({
     name: '',

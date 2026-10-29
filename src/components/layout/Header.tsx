@@ -7,6 +7,7 @@ import {
   ChevronDown,
   Shield,
   Camera,
+  Menu,
 } from 'lucide-react';
 import { Company, User } from '../../types';
 import { MonthPickerFilter } from '../common/MonthPickerFilter';
@@ -25,6 +26,8 @@ interface HeaderProps {
   onNavigateSettings?: () => void;
   onUpdateUser?: (updatedUser: User) => void;
   onOpenCreateCompany?: () => void;
+  /** Abre o menu lateral no celular */
+  onOpenMobileNav?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -40,6 +43,7 @@ export const Header: React.FC<HeaderProps> = ({
   onNavigateSettings,
   onUpdateUser,
   onOpenCreateCompany,
+  onOpenMobileNav,
 }) => {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState<boolean>(false);
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState<boolean>(false);
@@ -83,17 +87,27 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="h-16 bg-white border-b border-slate-200 px-4 sm:px-8 flex items-center justify-between z-10 sticky top-0 shadow-sm">
+    <header className="h-16 bg-white border-b border-slate-200 px-3 sm:px-8 flex items-center justify-between gap-2 z-10 sticky top-0 shadow-sm">
       {/* Current Section Title & Company Selector */}
-      <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-        <h1 className="text-base sm:text-lg font-bold text-slate-800 font-heading tracking-tight truncate">
+      <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+        {onOpenMobileNav && (
+          <button
+            type="button"
+            onClick={onOpenMobileNav}
+            aria-label="Abrir menu"
+            className="lg:hidden p-2 -ml-1 rounded-lg text-slate-600 hover:bg-slate-100 shrink-0"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        )}
+        <h1 className="hidden md:block text-base sm:text-lg font-bold text-slate-800 font-heading tracking-tight truncate">
           {activeTabTitle}
         </h1>
 
-        <span className="text-slate-300 hidden sm:inline">|</span>
+        <span className="text-slate-300 hidden md:inline">|</span>
 
         {/* Company Switcher */}
-        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/90 rounded-lg px-2.5 sm:px-3 py-1.5 shadow-xs hover:border-slate-300 transition-colors shrink-0">
+        <div className="hidden sm:flex items-center gap-2 bg-slate-50 border border-slate-200/90 rounded-lg px-2.5 sm:px-3 py-1.5 shadow-xs hover:border-slate-300 transition-colors shrink-0">
           <Building2 className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-blue-600 shrink-0" />
           <select
             id="company-selector"

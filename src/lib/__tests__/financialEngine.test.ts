@@ -760,12 +760,13 @@ describe('Financial Engine - NOX4 CFO Calculations & Integrity Suite (20 Scenari
     ];
 
     const dre = calculateDRE(revenues, expenses, mockRevCategories, mockExpCategories, '2026-08');
-    // Saldo em caixa: 100.000. Despesas: 30.000. Receita: 10.000. Queima líquida: 20.000/mês. Runway = 100.000 / 20.000 = 5 meses
-    const indicators = calculateIndicators(dre, null, mockClients, revenues, expenses, [], [], mockBankAccounts, mockExpCategories);
+    // Saldo inicial 100.000 + recebido 10.000 − pago 30.000 = 80.000 em caixa.
+    // Queima líquida: 30.000 − 10.000 = 20.000/mês. Runway = 80.000 / 20.000 = 4 meses
+    const indicators = calculateIndicators(dre, null, mockClients, revenues, expenses, [], [], mockBankAccounts, mockExpCategories, '2026-08-31');
 
-    expect(indicators.cash_balance).toBe(100000);
+    expect(indicators.cash_balance).toBe(80000);
     expect(indicators.burn_rate).toBe(30000);
-    expect(indicators.runway_months).toBe(5);
+    expect(indicators.runway_months).toBe(4);
   });
 
   // Cenário 20: Alertas de Risco de Caixa quando runway é curto
@@ -793,7 +794,7 @@ describe('Financial Engine - NOX4 CFO Calculations & Integrity Suite (20 Scenari
     ];
 
     const dre = calculateDRE(revenues, expenses, mockRevCategories, mockExpCategories, '2026-08');
-    const indicators = calculateIndicators(dre, null, mockClients, revenues, expenses, [], [], lowBankAccounts, mockExpCategories);
+    const indicators = calculateIndicators(dre, null, mockClients, revenues, expenses, [], [], lowBankAccounts, mockExpCategories, '2026-08-31');
     const clientProfitability = calculateClientProfitability(mockClients, revenues, expenses);
     const alerts = generateProactiveAlerts(dre, null, indicators, clientProfitability);
 
@@ -903,5 +904,53 @@ describe('Financial Engine - NOX4 CFO Calculations & Integrity Suite (20 Scenari
       expect(august?.operational_outflows).toBe(5000);
       expect(august?.net_period_change).toBe(10000);
     });
+  });
+});
+
+describe('Indicadores sem valores inventados (2026-10)', () => {
+  const bank: BankAccount[] = [
+    { id: 'b1', company_id: 'c', name: 'Conta', bank: 'X', account_type: 'checking', account_number: '1', opening_balance: 5000, current_balance: 5000, active: true },
+  ];
+  const revCats: RevenueCategory[] = [{ id: 'rc', company_id: 'c', name: 'Serviços', type: 'services', active: true }];
+  const expCats: ExpenseCategory[] = [{ id: 'ec', company_id: 'c', name: 'Aluguel', group: 'administrative', type: 'fixed', active: true }];
+
+  it('empresa sem lançamentos: runway, PMR, PMP, payback e score ficam vazios', () => {
+    const dre = calculateDRE([], [], revCats, expCats, '2026-10');
+    const ind = calculateIndicators(dre, null, [], [], [], [], [], [], expCats, '2026-10-29');
+    expect(ind.runway_months).toBeNull();
+    expect(ind.pmr_days).toBeNull();
+    expect(ind.pmp_days).toBeNull();
+    expect(ind.cac_payback_months).toBeNull();
+    expect(ind.health_score).toBeNull();
+    expect(ind.yoy_growth).toBeNull();
+    expect(ind.cash_balance).toBe(0);
+  });
+
+  it('saldo do indicador bate com o saldo final do fluxo de caixa do mês atual', () => {
+    const revenues: Revenue[] = [
+      { id: 'r1', company_id: 'c', description: 'Mensalidade', gross_amount: 10000, tax_amount: 0, net_amount: 10000, competence_date: '2026-10-01', due_date: '2026-10-05', received_date: '2026-10-10', category_id: 'rc', status: 'received', created_at: '' },
+      { id: 'r2', company_id: 'c', description: 'Em aberto', gross_amount: 3000, tax_amount: 0, net_amount: 3000, competence_date: '2026-10-01', due_date: '2026-10-20', category_id: 'rc', status: 'pending', created_at: '' },
+    ];
+    const expenses: Expense[] = [
+      { id: 'e1', company_id: 'c', supplier: 'Imob', description: 'Aluguel', amount: 1200, competence_date: '2026-10-01', due_date: '2026-10-05', paid_date: '2026-10-06', category_id: 'ec', status: 'paid', created_at: '' },
+      { id: 'e2', company_id: 'c', supplier: 'Sócio', description: 'Distribuição', amount: 2000, competence_date: '2026-10-15', due_date: '2026-10-15', paid_date: '2026-10-15', category_id: 'ec', status: 'paid', is_equity_movement: true, created_at: '' },
+    ];
+    const dre = calculateDRE(revenues, expenses, revCats, expCats, '2026-10');
+    const ind = calculateIndicators(dre, null, [], revenues, expenses, [], [], bank, expCats, '2026-10-31');
+    // 5000 + 10000 − 1200 − 2000 = 11800
+    expect(ind.cash_balance).toBe(11800);
+    const flow = calculateCashFlow(revenues, expenses, [], bank, 'monthly', '2026-10');
+    const oct = flow.find((p) => p.period_key === '2026-10');
+    expect(oct?.closing_balance).toBe(11800);
+    expect(oct?.financing_flows).toBe(-2000);
+    // Contas a receber derivadas da receita pendente, vencida em 29/10
+    const late = calculateIndicators(dre, null, [], revenues, expenses, [], [], bank, expCats, '2026-10-29');
+    expect(late.accounts_receivable_total).toBe(3000);
+    expect(late.default_rate_percent).toBe(100);
+    // PMR: 01/10 → 10/10 = 9 dias; PMP: 01/10 → 06/10 = 5 dias
+    expect(ind.pmr_days).toBe(9);
+    expect(ind.pmp_days).toBe(5);
+    expect(ind.runway_months).toBeNull();
+    expect(typeof ind.health_score).toBe('number');
   });
 });

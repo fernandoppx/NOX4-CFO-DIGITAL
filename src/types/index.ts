@@ -421,7 +421,7 @@ export interface FinancialIndicators {
   gross_revenue: number;
   net_revenue: number;
   mom_growth: number;
-  yoy_growth: number;
+  yoy_growth: number | null;
   gross_margin: number;
   gross_margin_percent?: number;
   contribution_margin: number;
@@ -437,7 +437,7 @@ export interface FinancialIndicators {
   arr: number;
   churn_rate: number;
   cac: number;
-  cac_payback_months?: number;
+  cac_payback_months?: number | null;
   ltv: number;
   ltv_cac_ratio: number;
   break_even_point: number;
@@ -446,7 +446,8 @@ export interface FinancialIndicators {
   variable_costs_total?: number;
   burn_rate: number;
   burn_rate_monthly?: number;
-  runway_months: number;
+  /** null = empresa não está queimando caixa no mês */
+  runway_months: number | null;
   payroll_to_revenue_percent: number;
   expenses_to_revenue_percent: number;
   costs_to_revenue_percent: number;
@@ -454,6 +455,8 @@ export interface FinancialIndicators {
   accounts_receivable_total: number;
   accounts_payable_total: number;
   default_rate_percent: number;
-  pmr_days?: number;
-  pmp_days?: number;
+  pmr_days?: number | null;
+  pmp_days?: number | null;
+  /** 0–100; null quando ainda não há lançamentos */
+  health_score?: number | null;
 }

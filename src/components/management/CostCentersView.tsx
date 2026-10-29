@@ -198,6 +198,16 @@ export const CostCentersView: React.FC<CostCentersViewProps> = ({
         </div>
       </div>
 
+      {costCenters.length === 0 && (
+        <div className="bg-white border border-dashed border-slate-300 rounded-xl p-8 text-center space-y-2">
+          <p className="text-sm font-bold text-slate-700">Nenhum centro de resultado cadastrado</p>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            Centros de resultado separam receitas e despesas por unidade de negócio (ex.: Consultoria, Tráfego,
+            Treinamentos), para você ver quanto cada uma dá de lucro. É opcional: os lançamentos funcionam sem eles.
+          </p>
+        </div>
+      )}
+
       {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {costCenters.map((cc) => {
