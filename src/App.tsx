@@ -62,7 +62,7 @@ import {
   updateBankAccount as updateBankAccountInDb,
   deleteBankAccount as deleteBankAccountInDb,
 } from './lib/financialRepository';
-import { getCurrentYearMonth, getTodayISO } from './lib/utils';
+import { getCurrentYearMonth, getTodayISO, parseDecimalInput } from './lib/utils';
 
 import {
   calculateDRE,
@@ -1701,8 +1701,11 @@ export default function App() {
       companyExpenseCategories.find((c) => c.active !== false && c.group === 'operational') ||
       companyExpenseCategories.find((c) => c.active !== false && c.group !== 'equity');
     const defaultCC = companyCostCenters.find((c) => c.active !== false);
+    // Aceita 1.500,00 / 1500,00 / 1500.00 / R$ 1.500
     const parseBRL = (v: string) => {
-      const n = parseFloat(v.replace(/R\$|\s/g, '').replace(/\./g, '').replace(',', '.'));
+      const raw = (v || '').replace(/R\$|\s/g, '');
+      if (!/\d/.test(raw)) return NaN;
+      const n = parseDecimalInput(raw);
       return isFinite(n) ? n : NaN;
     };
     const parseDate = (v: string | undefined, fallback: string) => {
