@@ -223,7 +223,7 @@ export const ReceivablesPayablesView: React.FC<ReceivablesPayablesViewProps> = (
                 }`}
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>{isReceivables ? '+ Novo Título a Receber' : '+ Nova Conta a Pagar'}</span>
+                <span>{isReceivables ? 'Novo Título a Receber' : 'Nova Conta a Pagar'}</span>
               </button>
             )}
 
