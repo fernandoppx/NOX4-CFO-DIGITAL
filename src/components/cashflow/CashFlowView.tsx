@@ -30,6 +30,7 @@ import {
   AreaChart,
   Area,
 } from 'recharts';
+import { ChartEmptyState } from '../common/ChartEmptyState';
 import { CashFlowPeriod, BankAccount } from '../../types';
 import { formatCurrency, formatPercent, formatAxisCurrency, parseDecimalInput, formatDate, getTodayISO } from '../../lib/utils';
 import { MonthPickerFilter } from '../common/MonthPickerFilter';
@@ -337,6 +338,9 @@ export const CashFlowView: React.FC<CashFlowViewProps> = ({
         </div>
 
         <div className="h-72 w-full">
+          {chartData.every((d: any) => !d.entradas && !d.saidas) ? (
+            <ChartEmptyState message="Nenhuma entrada ou saída de caixa no período exibido." />
+          ) : (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -350,6 +354,7 @@ export const CashFlowView: React.FC<CashFlowViewProps> = ({
               <Bar dataKey="saidas" fill="#f43f5e" radius={[4, 4, 0, 0]} name="Saídas" />
             </BarChart>
           </ResponsiveContainer>
+          )}
         </div>
       </div>
 
