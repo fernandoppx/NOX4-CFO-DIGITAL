@@ -256,7 +256,7 @@ export const CostCentersView: React.FC<CostCentersViewProps> = ({
 
                 <div className="mt-4 pt-3 border-t border-slate-100 space-y-2 text-xs">
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-500">Receita Líquida:</span>
+                    <span className="text-slate-500">Receita Líquida (acumulada):</span>
                     <span className="font-mono font-semibold text-emerald-600">
                       {formatCurrency(totalNetRevenue)}
                     </span>
@@ -287,13 +287,23 @@ export const CostCentersView: React.FC<CostCentersViewProps> = ({
                 >
                   <Edit2 className="w-3 h-3 text-slate-500" /> Editar
                 </button>
-                <button
-                  onClick={() => setCostCenterToDelete(cc)}
-                  title="Excluir Centro de Resultado"
-                  className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition-colors cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                {cc.code === 'CC00' ? (
+                  // Centro padrão: recebe os lançamentos sem centro definido, não pode ser excluído
+                  <span
+                    title="Centro de resultado padrão da empresa. Não pode ser excluído."
+                    className="p-1.5 rounded-lg bg-slate-50 text-slate-300 border border-slate-200 cursor-not-allowed"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => setCostCenterToDelete(cc)}
+                    title="Excluir Centro de Resultado"
+                    className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
           );

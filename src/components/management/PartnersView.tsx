@@ -412,7 +412,7 @@ export const PartnersView: React.FC<PartnersViewProps> = ({
               {equityDistributions.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="py-6 text-center text-xs text-slate-500">
-                    Nenhuma distribuição de lucros registrada no período.
+                    Nenhuma distribuição de lucros registrada até agora.
                   </td>
                 </tr>
               ) : (
