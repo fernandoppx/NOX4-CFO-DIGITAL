@@ -214,16 +214,19 @@ export const MonthPickerFilter: React.FC<MonthPickerFilterProps> = ({
       </button>
 
       {/* Atalho para voltar ao mês atual */}
-      {selectedMonth !== todayMonth && (
-        <button
-          type="button"
-          onClick={handleCurrentMonth}
-          title={`Voltar para o mês atual (${formatShortMonth(todayMonth)})`}
-          className="hidden sm:inline-flex px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors cursor-pointer shrink-0"
-        >
-          Mês atual
-        </button>
-      )}
+      {/* Sempre renderizado (invisível no mês atual) para o layout não "pular" ao trocar de mês */}
+      <button
+        type="button"
+        onClick={handleCurrentMonth}
+        title={`Voltar para o mês atual (${formatShortMonth(todayMonth)})`}
+        aria-hidden={selectedMonth === todayMonth}
+        tabIndex={selectedMonth === todayMonth ? -1 : 0}
+        className={`hidden sm:inline-flex px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors cursor-pointer shrink-0 ${
+          selectedMonth === todayMonth ? 'invisible pointer-events-none' : ''
+        }`}
+      >
+        Mês atual
+      </button>
     </div>
   );
 };
