@@ -145,7 +145,7 @@ export const DREView: React.FC<DREViewProps> = ({
 
           {/* % of Net Revenue (AV) */}
           <td className="py-3 px-4 text-right font-mono text-xs text-slate-500">
-            {formatPercent(line.percentage_of_net)}
+            {currentDRE.net_revenue !== 0 ? formatPercent(line.percentage_of_net) : '—'}
           </td>
 
           {/* Previous Month Comparison */}
@@ -191,7 +191,7 @@ export const DREView: React.FC<DREViewProps> = ({
                 )}
               </td>
               <td className="py-2.5 px-4 text-right font-mono text-slate-400">
-                {formatPercent(child.percentage_of_net)}
+                {currentDRE.net_revenue !== 0 ? formatPercent(child.percentage_of_net) : '—'}
               </td>
               {compareWithPrevious && (
                 <>
@@ -322,7 +322,7 @@ export const DREView: React.FC<DREViewProps> = ({
             {formatCurrency(currentDRE.gross_profit)}
           </div>
           <div className="text-[11px] text-emerald-600 font-semibold mt-0.5">
-            Margem Bruta: {formatPercent(currentDRE.gross_margin)}
+            Margem Bruta: {currentDRE.net_revenue !== 0 ? formatPercent(currentDRE.gross_margin) : '—'}
           </div>
         </div>
 
@@ -332,7 +332,7 @@ export const DREView: React.FC<DREViewProps> = ({
             {formatCurrency(currentDRE.operating_profit)}
           </div>
           <div className="text-[11px] text-blue-600 font-semibold mt-0.5">
-            Margem Op: {formatPercent(currentDRE.operating_margin)}
+            Margem Op: {currentDRE.net_revenue !== 0 ? formatPercent(currentDRE.operating_margin) : '—'}
           </div>
         </div>
 
@@ -342,7 +342,7 @@ export const DREView: React.FC<DREViewProps> = ({
             {formatCurrency(currentDRE.net_profit)}
           </div>
           <div className="text-[11px] text-emerald-600 font-semibold mt-0.5">
-            Margem Líquida: {formatPercent(currentDRE.net_margin)}
+            Margem Líquida: {currentDRE.net_revenue !== 0 ? formatPercent(currentDRE.net_margin) : '—'}
           </div>
         </div>
       </div>

@@ -149,13 +149,13 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
           </div>
           <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
             <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Realizado no Mês</div>
-            <div className="text-lg font-bold text-rose-600 font-heading mt-0.5">
+            <div className={`text-lg font-bold font-heading mt-0.5 ${totalActual > 0 ? 'text-rose-600' : 'text-slate-800'}`}>
               {formatCurrency(totalActual)}
             </div>
           </div>
           <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
             <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Saldo Orçamentário</div>
-            <div className={`text-lg font-bold font-heading mt-0.5 ${totalVariance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+            <div className={`text-lg font-bold font-heading mt-0.5 ${Math.abs(totalVariance) < 0.005 ? 'text-slate-800' : totalVariance > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
               {totalVariance >= 0 ? formatCurrency(totalVariance) : `(${formatCurrency(Math.abs(totalVariance))})`}
             </div>
           </div>
@@ -200,13 +200,15 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                     {formatCurrency(item.budgetedAmount)}
                   </td>
 
-                  <td className="py-3 px-4 text-right font-mono font-bold text-rose-600">
+                  <td className={`py-3 px-4 text-right font-mono font-bold ${item.actualAmount > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
                     {formatCurrency(item.actualAmount)}
                   </td>
 
                   <td className="py-3 px-4 text-right font-mono font-semibold">
-                    <span className={item.varianceAmount >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
-                      {item.varianceAmount >= 0
+                    <span className={Math.abs(item.varianceAmount) < 0.005 ? 'text-slate-400' : item.varianceAmount > 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                      {Math.abs(item.varianceAmount) < 0.005
+                        ? formatCurrency(0)
+                        : item.varianceAmount > 0
                         ? `+${formatCurrency(item.varianceAmount)}`
                         : `(${formatCurrency(Math.abs(item.varianceAmount))})`}
                     </span>

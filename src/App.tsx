@@ -668,7 +668,8 @@ export default function App() {
       code: 'REC',
       group: 'revenue',
       active: rc.active,
-    }));
+      rev_type: rc.type,
+    } as Category));
     const expCats: Category[] = companyExpenseCategories.map((ec) => ({
       id: ec.id,
       company_id: ec.company_id,
@@ -798,22 +799,23 @@ export default function App() {
 
   // Tab Titles map
   const tabTitles: Record<NavTab, string> = {
-    dashboard: 'Dashboard Executivo',
-    revenues: 'Lançamentos de Receitas',
-    expenses: 'Lançamentos de Despesas & Custos',
+    // Títulos curtos, iguais ao menu lateral, para não serem cortados no topo
+    dashboard: 'Dashboard',
+    revenues: 'Receitas',
+    expenses: 'Despesas',
     receivables: 'Contas a Receber',
     payables: 'Contas a Pagar',
-    cashflow: 'Fluxo de Caixa & Tesouraria',
-    dre: 'DRE Gerencial Oficial',
-    clients: 'Gestão de Clientes & Contratos',
+    cashflow: 'Fluxo de Caixa',
+    dre: 'DRE Gerencial',
+    clients: 'Clientes',
     products: 'Produtos & Serviços',
-    cost_centers: 'Centros de Resultado (BU)',
-    budget: 'Orçamento (Budget) x Realizado',
-    partners: 'Sócios, Pró-labore & Patrimônio',
-    team: 'Equipe da Empresa',
-    settings: 'Configurações & Governança',
+    cost_centers: 'Centros de Resultado',
+    budget: 'Orçamento',
+    partners: 'Sócios & Patrimônio',
+    team: 'Equipe',
+    settings: 'Configurações',
     billing: 'Plano e Cobrança',
-    admin_panel: 'Painel Global do System Admin',
+    admin_panel: 'System Admin',
   };
 
   // State Action Handlers
@@ -1716,10 +1718,30 @@ export default function App() {
       return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : fallback;
     };
 
+    // Coluna opcional de categoria: busca pelo nome no Plano de Contas (sem diferenciar maiúsculas/acentos)
+    const norm = (t: string) =>
+      (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    const findRevCat = (name?: string) => {
+      if (!name) return undefined;
+      const n = norm(name);
+      return companyRevenueCategories.find((c) => c.active !== false && (norm(c.name) === n || norm(c.name).includes(n)));
+    };
+    const findExpCat = (name?: string) => {
+      if (!name) return undefined;
+      const n = norm(name);
+      return companyExpenseCategories.find(
+        (c) => c.active !== false && c.group !== 'equity' && (norm(c.name) === n || norm(c.name).includes(n))
+      );
+    };
+    // Coluna opcional de status: pago/recebido/liquidado → liquidado; qualquer outro → pendente
+    const parseSettled = (v?: string) => /^(pago|paga|recebido|recebida|liquidado|quitado)$/i.test(norm(v || ''));
+
     let ok = 0;
     let skipped = 0;
+    let categoryFallbacks = 0;
     for (const line of lines) {
-      const parts = line.split(';').map((p) => p.trim());
+      // Aceita ";" ou tabulação (colar direto do Excel/Google Sheets)
+      const parts = line.split(line.includes(';') ? ';' : '\t').map((p) => p.trim());
       if (parts.length < 2) {
         skipped++;
         continue;
@@ -1733,13 +1755,18 @@ export default function App() {
       const compDate = parseDate(parts[2], `${selectedMonth}-01`);
       const dueDate = parseDate(parts[3], compDate);
 
+      const settled = parseSettled(parts[5]);
+
       if (type === 'revenues') {
-        if (!defaultRevCat) break;
+        const matchedCat = findRevCat(parts[4]);
+        if (parts[4] && !matchedCat) categoryFallbacks++;
+        const cat = matchedCat || defaultRevCat;
+        if (!cat) break;
         const saved = await handleAddRevenue({
           company_id: selectedCompanyId,
           description,
           cost_center_id: defaultCC?.id,
-          category_id: defaultRevCat.id,
+          category_id: cat.id,
           gross_amount: amount,
           tax_amount: 0,
           commission_amount: 0,
@@ -1747,23 +1774,30 @@ export default function App() {
           net_amount: amount,
           competence_date: compDate,
           due_date: dueDate,
-          status: 'pending',
+          received_date: settled ? dueDate : undefined,
+          payment_date: settled ? dueDate : undefined,
+          status: settled ? 'received' : 'pending',
         });
         if (saved) ok++;
         else skipped++;
       } else {
-        if (!defaultExpCat) break;
+        const matchedCat = findExpCat(parts[4]);
+        if (parts[4] && !matchedCat) categoryFallbacks++;
+        const cat = matchedCat || defaultExpCat;
+        if (!cat) break;
         const saved = await handleAddExpense({
           company_id: selectedCompanyId,
           description,
           supplier: '',
           cost_center_id: defaultCC?.id,
-          category_id: defaultExpCat.id,
+          category_id: cat.id,
           amount,
-          cost_nature: 'FIXED',
+          cost_nature: cat.type === 'variable' ? 'VARIABLE' : 'FIXED',
           competence_date: compDate,
           due_date: dueDate,
-          status: 'pending',
+          paid_date: settled ? dueDate : undefined,
+          payment_date: settled ? dueDate : undefined,
+          status: settled ? 'paid' : 'pending',
           is_equity_movement: false,
         });
         if (saved) ok++;
@@ -1771,8 +1805,11 @@ export default function App() {
       }
     }
     return (
-      `Importação concluída: ${ok} lançamento(s) importado(s)${skipped ? `, ${skipped} linha(s) ignorada(s)` : ''}. ` +
-      'Eles entraram como pendentes, na categoria padrão: revise categoria e status em cada um.'
+      `Importação concluída: ${ok} lançamento(s) importado(s)${skipped ? `, ${skipped} linha(s) ignorada(s)` : ''}.` +
+      (categoryFallbacks
+        ? ` ${categoryFallbacks} linha(s) com categoria não encontrada foram para a categoria padrão: revise-as.`
+        : '') +
+      ' Linhas sem status entram como pendentes.'
     );
   };
 
@@ -1994,6 +2031,11 @@ export default function App() {
           onNavigateSettings={() => setCurrentTab('settings')}
           onUpdateUser={handleUpdateUser}
           onOpenMobileNav={() => setIsMobileNavOpen(true)}
+          currentUserRole={currentUserRole}
+          isSystemAdmin={isSysAdmin}
+          // As telas que dependem de período já têm filtro próprio (sincronizado com o mesmo estado);
+          // as demais não dependem de mês. Desligado para não duplicar o filtro.
+          showPeriodFilter={false}
         />
 
         {/* View Router */}
@@ -2197,6 +2239,7 @@ export default function App() {
               currentUserRole={currentUserRole}
               currentUserId={currentUser.id}
               currentUserAvatar={currentUser.avatar}
+              currentUserEmail={currentUser.email}
             />
           )}
 
@@ -2251,6 +2294,11 @@ export default function App() {
         onAddRevenue={handleAddRevenue}
         onAddExpense={handleAddExpense}
         onManageCategories={() => setCurrentTab('settings')}
+        knownSuppliers={(
+          Array.from(
+            new Set(companyExpenses.map((e: Expense) => String(e.supplier || '').trim()).filter(Boolean))
+          ) as string[]
+        ).sort((a, b) => a.localeCompare(b, 'pt-BR'))}
       />
 
       {/* Global Edit Transaction Modal */}

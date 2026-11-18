@@ -215,8 +215,8 @@ export const RevenuesView: React.FC<RevenuesViewProps> = ({
           </div>
           <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
             <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Deduções Fiscais/Comissões</div>
-            <div className="text-lg font-bold text-rose-600 font-heading mt-0.5">
-              -{formatCurrency(totalDeductions)}
+            <div className={`text-lg font-bold font-heading mt-0.5 ${totalDeductions > 0 ? 'text-rose-600' : 'text-slate-800'}`}>
+              {totalDeductions > 0 ? `-${formatCurrency(totalDeductions)}` : formatCurrency(0)}
             </div>
           </div>
           <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
@@ -306,7 +306,14 @@ export const RevenuesView: React.FC<RevenuesViewProps> = ({
               {filteredRevenues.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-8 text-center text-xs text-slate-500">
-                    Nenhuma receita encontrada para os filtros selecionados.
+                    <p>Nenhuma receita encontrada para os filtros selecionados.</p>
+                    <button
+                      type="button"
+                      onClick={onOpenNewRevenueModal}
+                      className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
+                    >
+                      + Lançar receita
+                    </button>
                   </td>
                 </tr>
               ) : (
