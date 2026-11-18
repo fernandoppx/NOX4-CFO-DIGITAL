@@ -397,7 +397,7 @@ export function calculateDRE(
       name: '(=) RECEITA OPERACIONAL LÍQUIDA',
       level: 1,
       amount: net_revenue,
-      percentage_of_net: 100,
+      percentage_of_net: net_revenue !== 0 ? 100 : 0,
       is_total: true,
     },
     {
