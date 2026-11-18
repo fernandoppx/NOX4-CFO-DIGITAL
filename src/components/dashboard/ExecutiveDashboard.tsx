@@ -31,8 +31,9 @@ import {
   AreaChart,
   Area,
 } from 'recharts';
+import { ChartEmptyState } from '../common/ChartEmptyState';
 import { DREStatement, FinancialIndicators, CashFlowPeriod, Client } from '../../types';
-import { formatCurrency, formatPercent, getCurrentYearMonth, formatAxisCurrency } from '../../lib/utils';
+import { formatCurrency, formatPercent, getCurrentYearMonth, formatAxisCurrency, formatPeriodLabel } from '../../lib/utils';
 import { MonthPickerFilter } from '../common/MonthPickerFilter';
 
 interface ExecutiveDashboardProps {
@@ -69,17 +70,26 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   onSelectMonth,
   onNavigateToTab,
 }) => {
+  // Sem receita no período não existe margem: mostra "—" em vez de 0,0% / 100%
+  const hasRevenue = currentDRE.net_revenue !== 0;
+  const hasMonthData =
+    currentDRE.gross_revenue !== 0 ||
+    currentDRE.cost_of_services !== 0 ||
+    currentDRE.total_operating_expenses !== 0 ||
+    (previousDRE ? previousDRE.gross_revenue !== 0 || previousDRE.total_operating_expenses !== 0 : false);
+  const pctOrDash = (v: number) => (hasRevenue ? formatPercent(v) : '—');
+
   // Monthly overview data for charts
   const monthlyData = [
     {
-      name: 'Mês Anterior',
+      name: previousDRE?.period ? formatPeriodLabel(previousDRE.period) : 'Mês anterior',
       receita: previousDRE ? previousDRE.net_revenue : 0,
       despesas: previousDRE ? previousDRE.total_operating_expenses + previousDRE.cost_of_services : 0,
       lucro: previousDRE ? previousDRE.net_profit : 0,
       margem: previousDRE ? previousDRE.net_margin : 0,
     },
     {
-      name: `${currentDRE.period} (Atual)`,
+      name: `${formatPeriodLabel(currentDRE.period)} (atual)`,
       receita: currentDRE.net_revenue,
       despesas: currentDRE.total_operating_expenses + currentDRE.cost_of_services,
       lucro: currentDRE.net_profit,
@@ -121,28 +131,33 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
       subtext: `Receita Líquida: ${formatCurrency(currentDRE.net_revenue)}`,
       icon: DollarSign,
       color: 'text-blue-400',
-      trend: indicators.mom_growth >= 0 ? `+${indicators.mom_growth.toFixed(1)}% MoM` : `${indicators.mom_growth.toFixed(1)}% MoM`,
+      trend: !previousDRE || previousDRE.gross_revenue === 0
+        ? '—'
+        : `${indicators.mom_growth >= 0 ? '+' : ''}${indicators.mom_growth.toFixed(1).replace('.', ',')}% MoM`,
       isPositive: indicators.mom_growth >= 0,
+      isNeutral: !previousDRE || previousDRE.gross_revenue === 0,
     },
     {
       id: 'kpi-lucro-bruto',
       title: 'Lucro Bruto',
       value: formatCurrency(currentDRE.gross_profit),
-      subtext: `Margem Bruta: ${formatPercent(currentDRE.gross_margin)}`,
+      subtext: `Margem Bruta: ${pctOrDash(currentDRE.gross_margin)}`,
       icon: TrendingUp,
       color: 'text-emerald-400',
-      trend: `${formatPercent(currentDRE.gross_margin)}`,
+      trend: pctOrDash(currentDRE.gross_margin),
       isPositive: currentDRE.gross_margin >= 50,
+      isNeutral: !hasRevenue,
     },
     {
       id: 'kpi-lucro-liquido',
       title: 'Lucro Líquido',
       value: formatCurrency(currentDRE.net_profit),
-      subtext: `Margem Líquida: ${formatPercent(currentDRE.net_margin)}`,
+      subtext: `Margem Líquida: ${pctOrDash(currentDRE.net_margin)}`,
       icon: currentDRE.net_profit >= 0 ? ArrowUpRight : ArrowDownRight,
       color: currentDRE.net_profit >= 0 ? 'text-emerald-400' : 'text-rose-400',
-      trend: `${formatPercent(currentDRE.net_margin)}`,
+      trend: pctOrDash(currentDRE.net_margin),
       isPositive: currentDRE.net_profit >= 0,
+      isNeutral: !hasRevenue,
     },
     {
       id: 'kpi-saldo-caixa',
@@ -150,7 +165,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
       value: formatCurrency(indicators.cash_balance),
       subtext:
         indicators.runway_months === null
-          ? 'Sem queima de caixa no mês'
+          ? 'Sem queima no mês'
           : `Runway: ${indicators.runway_months.toFixed(1).replace('.', ',')} meses`,
       icon: Wallet,
       color: 'text-cyan-400',
@@ -164,21 +179,27 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
       id: 'kpi-receber',
       title: 'Contas a Receber',
       value: formatCurrency(indicators.accounts_receivable_total),
-      subtext: `Inadimplência: ${formatPercent(indicators.default_rate_percent)}`,
+      subtext: indicators.accounts_receivable_total > 0
+        ? `Inadimplência: ${formatPercent(indicators.default_rate_percent)}`
+        : 'Nenhum título em aberto',
       icon: Clock,
       color: 'text-amber-400',
-      trend: indicators.default_rate_percent <= 5 ? 'Saudável' : 'Atenção',
+      trend: indicators.accounts_receivable_total > 0
+        ? indicators.default_rate_percent <= 5 ? 'Saudável' : 'Atenção'
+        : '—',
       isPositive: indicators.default_rate_percent <= 5,
+      isNeutral: indicators.accounts_receivable_total <= 0,
     },
     {
       id: 'kpi-pagar',
       title: 'Contas a Pagar',
       value: formatCurrency(indicators.accounts_payable_total),
-      subtext: `Compromissos pendentes`,
+      subtext: indicators.accounts_payable_total > 0 ? 'Compromissos pendentes' : 'Nenhuma conta em aberto',
       icon: TrendingDown,
       color: 'text-rose-400',
-      trend: 'Em dia',
+      trend: indicators.accounts_payable_total > 0 ? 'Pendente' : '—',
       isPositive: true,
+      isNeutral: indicators.accounts_payable_total <= 0,
     },
   ];
 
@@ -225,6 +246,35 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
         </div>
       </div>
 
+      {/* Primeiros passos: aparece enquanto a empresa ainda não tem dados */}
+      {!hasMonthData && indicators.cash_balance === 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 sm:p-5">
+          <h3 className="text-sm font-bold text-blue-900 font-heading">Primeiros passos para ativar o painel</h3>
+          <p className="text-xs text-blue-800/80 mt-0.5">
+            Os indicadores ficam corretos a partir do momento em que o saldo inicial e os lançamentos estão cadastrados.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
+            {[
+              { n: 1, label: 'Cadastrar contas bancárias e saldo inicial', tab: 'cashflow' },
+              { n: 2, label: 'Cadastrar clientes e produtos/serviços', tab: 'clients' },
+              { n: 3, label: 'Lançar receitas e despesas do mês', tab: 'revenues' },
+            ].map((step) => (
+              <button
+                key={step.n}
+                type="button"
+                onClick={() => onNavigateToTab(step.tab)}
+                className="flex items-center gap-2.5 text-left bg-white border border-blue-200 hover:border-blue-400 rounded-lg px-3 py-2.5 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
+              >
+                <span className="w-5 h-5 shrink-0 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center">
+                  {step.n}
+                </span>
+                <span>{step.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Top 6 KPI Cards (Sleek Interface Style) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {kpiCards.map((kpi) => {
@@ -252,7 +302,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                   <span className="truncate">{kpi.subtext}</span>
                   <span
                     className={`font-bold ml-1 shrink-0 ${
-                      kpi.isPositive ? 'text-emerald-600' : 'text-rose-600'
+                      (kpi as any).isNeutral ? 'text-slate-400' : kpi.isPositive ? 'text-emerald-600' : 'text-rose-600'
                     }`}
                   >
                     {kpi.trend}
@@ -270,7 +320,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
         <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
           <div className="p-4 border-b border-slate-100 flex justify-between items-center">
             <h4 className="text-sm font-bold text-slate-800 font-heading">
-              Resumo DRE Gerencial <span className="font-normal text-slate-400 ml-2">Competência {currentDRE.period}</span>
+              Resumo DRE Gerencial <span className="font-normal text-slate-400 ml-2">Competência {formatPeriodLabel(currentDRE.period)}</span>
             </h4>
             <button
               onClick={() => onNavigateToTab('dre')}
@@ -298,7 +348,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                 <span className="font-mono">({formatCurrency(currentDRE.cost_of_services)})</span>
               </div>
               <div className="flex justify-between py-2 px-3 font-bold bg-blue-50 text-blue-800 rounded-md">
-                <span>(=) Lucro Bruto ({formatPercent(currentDRE.gross_margin)})</span>
+                <span>(=) Lucro Bruto ({pctOrDash(currentDRE.gross_margin)})</span>
                 <span className="font-mono">{formatCurrency(currentDRE.gross_profit)}</span>
               </div>
               <div className="flex justify-between py-1.5 px-3 text-slate-600">
@@ -306,7 +356,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                 <span className="font-mono">({formatCurrency(currentDRE.total_operating_expenses)})</span>
               </div>
               <div className="flex justify-between py-2.5 px-3 font-bold border-t-2 border-slate-900 mt-2 text-base text-slate-900 bg-slate-50 rounded-md">
-                <span>Lucro Líquido Final ({formatPercent(currentDRE.net_margin)})</span>
+                <span>Lucro Líquido Final ({pctOrDash(currentDRE.net_margin)})</span>
                 <span className={`font-mono ${currentDRE.net_profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                   {formatCurrency(currentDRE.net_profit)}
                 </span>
@@ -472,6 +522,9 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
           </div>
 
           <div className="h-64 w-full">
+            {!hasMonthData ? (
+              <ChartEmptyState message="Sem receitas ou despesas neste mês e no anterior. Os gráficos aparecem com o primeiro lançamento." />
+            ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -486,6 +539,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                 <Bar dataKey="lucro" fill="#10b981" radius={[4, 4, 0, 0]} name="Lucro Líquido" />
               </BarChart>
             </ResponsiveContainer>
+            )}
           </div>
         </div>
 
@@ -503,6 +557,9 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
             </p>
 
             <div className="h-44 w-full">
+              {expenseCategoriesData.length === 0 ? (
+                <ChartEmptyState message="Nenhuma despesa lançada neste mês." />
+              ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -524,6 +581,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                   />
                 </PieChart>
               </ResponsiveContainer>
+              )}
             </div>
           </div>
 
@@ -565,6 +623,13 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
           </div>
 
           <div className="h-56 w-full">
+            {cashFlowTimeline.every((p) => !p.saldo && !p.entradas && !p.saidas) ? (
+              <ChartEmptyState
+                message="Sem movimentação de caixa. Cadastre suas contas bancárias com o saldo inicial para projetar o saldo."
+                actionLabel="Ir para Fluxo de Caixa"
+                onAction={() => onNavigateToTab('cashflow')}
+              />
+            ) : (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={cashFlowTimeline} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                 <defs>
@@ -574,7 +639,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="period" stroke="#64748b" fontSize={11} interval={0} />
+                <XAxis dataKey="period" stroke="#64748b" fontSize={11} interval="preserveStartEnd" tickMargin={6} padding={{ left: 8, right: 16 }} />
                 <YAxis stroke="#64748b" fontSize={11} width={78} tickFormatter={(v) => formatAxisCurrency(Number(v))} />
                 <Tooltip
                   contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', color: '#0f172a', borderRadius: '8px', fontSize: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
@@ -583,6 +648,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                 <Area type="monotone" dataKey="saldo" stroke="#2563eb" strokeWidth={2.5} fillOpacity={1} fill="url(#colorSaldo)" name="Saldo Acumulado" />
               </AreaChart>
             </ResponsiveContainer>
+            )}
           </div>
         </div>
 
@@ -606,7 +672,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
 
             <div className="grid grid-cols-3 gap-2 my-2 py-4 bg-slate-50 border border-slate-100 rounded-xl">
               <div className="flex flex-col items-center justify-center border-r border-slate-200 px-2 text-center">
-                <p className="text-2xl font-bold text-slate-900 font-heading">{indicators.default_rate_percent.toFixed(1)}%</p>
+                <p className="text-2xl font-bold text-slate-900 font-heading">{indicators.accounts_receivable_total > 0 ? formatPercent(indicators.default_rate_percent) : '—'}</p>
                 <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Inadimplência</p>
               </div>
               <div className="flex flex-col items-center justify-center px-2 text-center">
