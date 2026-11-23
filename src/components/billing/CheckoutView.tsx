@@ -34,6 +34,10 @@ interface CheckoutViewProps {
   onLogout?: () => void;
 }
 
+/** Contrato de licença vigente (página pública em /contrato.html) */
+const CONTRACT_VERSION = '1.0';
+const CONTRACT_URL = '/contrato.html';
+
 // Utilitários de máscara
 const formatCNPJ = (value: string): string => {
   const digits = value.replace(/\D/g, '').slice(0, 14);
@@ -107,6 +111,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   const [formValidationWarning, setFormValidationWarning] = useState<string | null>(null);
   const [checkoutResult, setCheckoutResult] = useState<AsaasStartCheckoutResponse | null>(null);
   const [isPixCopied, setIsPixCopied] = useState<boolean>(false);
+  // Aceite do contrato de licença (obrigatório para contratar)
+  const [contractAccepted, setContractAccepted] = useState<boolean>(false);
 
   // Valores limpos para integração com a Edge Function
   const cleanCnpj = cnpjDisplay.replace(/\D/g, '');
@@ -193,6 +199,11 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
       return;
     }
 
+    if (!contractAccepted) {
+      setFormValidationWarning('Para continuar, leia e aceite o Contrato de Licença de Uso do NOX4.');
+      return;
+    }
+
     if (isSubmitting) return;
 
     // 2. AUTENTICAÇÃO
@@ -227,6 +238,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
             cpfCnpj,
             billingEmail: billingEmail.trim(),
             phone,
+            // Versão do contrato aceita: a Edge Function registra data/hora do aceite
+            // e envia o contrato por e-mail quando o pagamento é confirmado.
+            acceptedContractVersion: CONTRACT_VERSION,
           },
         }
       );
@@ -970,12 +984,35 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                       </p>
                     </div>
 
+                    {/* Aceite do contrato */}
+                    <label className="flex items-start gap-2.5 text-xs text-slate-300 cursor-pointer">
+                      <input
+                        id="chk-accept-contract"
+                        type="checkbox"
+                        checked={contractAccepted}
+                        onChange={(e) => setContractAccepted(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-900 text-blue-600 focus:ring-0 shrink-0"
+                      />
+                      <span>
+                        Li e aceito o{' '}
+                        <a
+                          href={CONTRACT_URL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-400 underline hover:text-blue-300"
+                        >
+                          Contrato de Licença de Uso do NOX4 (v{CONTRACT_VERSION})
+                        </a>
+                        . Uma cópia será enviada para o e-mail de cobrança após a confirmação do pagamento.
+                      </span>
+                    </label>
+
                     {/* 3. Botão CONTINUAR PARA PAGAMENTO */}
                     <div className="pt-2">
                       <button
                         id="btn-continue-to-payment"
                         type="submit"
-                        disabled={isSubmitting || isLoading}
+                        disabled={isSubmitting || isLoading || !contractAccepted}
                         className="w-full py-3.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] text-white font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 cursor-pointer"
                       >
                         {isSubmitting ? (
