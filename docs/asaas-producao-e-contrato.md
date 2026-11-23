@@ -6,7 +6,7 @@ Complementa `docs/asaas-black-friday.md`.
 ## Antes de tudo
 
 - [ ] Supabase reativado (o sistema não abre sem ele).
-- [ ] Contrato revisado por advogado e campos `[RAZÃO SOCIAL]`, `[CNPJ]`, `[ENDEREÇO]`, `[E-MAIL]`, `[CIDADE/UF]` preenchidos em `docs/contrato-licenca-nox4.md` **e** em `public/contrato.html` (a página pública que o checkout e o e-mail abrem).
+- [ ] Contrato revisado por advogado (os dados da NOX4 já estão preenchidos).
 
 ## 1. Conta Asaas de produção
 
@@ -34,26 +34,36 @@ No Supabase: *Edge Functions > Secrets*.
 3. Eventos: `PAYMENT_CONFIRMED`, `PAYMENT_RECEIVED`, `PAYMENT_OVERDUE`, `PAYMENT_REFUNDED`, `SUBSCRIPTION_DELETED`.
 4. Definir um **token de autenticação** e guardar o mesmo valor no secret da função (ex.: `ASAAS_WEBHOOK_TOKEN`). A função deve recusar chamadas sem o header `asaas-access-token` igual a ele.
 
-## 4. Contrato no checkout e por e-mail
+## 4. Contrato gerado e enviado automaticamente
 
-O que já está no código (PR #1):
+Como funciona:
 
-- O checkout só deixa continuar com a caixa **"Li e aceito o Contrato de Licença de Uso"** marcada, com link para `/contrato.html`.
-- O checkout envia `acceptedContractVersion: "1.0"` para `asaas-start-checkout`.
-- Função nova `supabase/functions/send-contract-email` (envia o e-mail com o link do contrato, dados do plano e data do aceite; não reenvia).
-- Migração `supabase/migrations/20261123180000_aceite_contrato.sql` (colunas do aceite em `subscriptions`).
+1. No checkout o cliente informa razão social ou nome, CPF/CNPJ, e-mail de cobrança e telefone, e marca **"Li e aceito o Contrato de Licença de Uso"** (sem isso o botão de pagamento fica bloqueado).
+2. `asaas-start-checkout` grava esses dados e o aceite na assinatura.
+3. No primeiro pagamento confirmado, o webhook chama `generate-contract`, que:
+   - busca o endereço oficial do CNPJ na Receita (BrasilAPI);
+   - gera o PDF a partir do modelo único (`supabase/functions/_shared/contractTemplate.ts`) com cliente, plano, preço, promoção e registro do aceite (data, hora, IP, versão);
+   - guarda o PDF no bucket privado `contracts` e o hash SHA-256 na assinatura;
+   - envia o e-mail ao cliente com o PDF anexado (e cópia oculta opcional para a NOX4).
 
 O que precisa ser feito no Supabase:
 
-1. Rodar a migração do aceite.
-2. Em `asaas-start-checkout`: ao criar a assinatura, gravar `contract_version = body.acceptedContractVersion`, `contract_accepted_at = now()`, `contract_accepted_ip` (header `x-forwarded-for`), `billing_email` e `company_name`. **Recusar** o checkout se `acceptedContractVersion` não vier.
-3. Criar conta no [Resend](https://resend.com), verificar o domínio de envio e cadastrar os secrets `RESEND_API_KEY`, `CONTRACT_FROM_EMAIL` e `APP_URL`.
-4. Publicar a função: `supabase functions deploy send-contract-email --no-verify-jwt`.
-5. No webhook, no **primeiro** pagamento confirmado da assinatura, chamar `send-contract-email` com `{ subscriptionId }` (exemplo no topo do arquivo da função).
+1. Rodar `supabase/migrations/20261123180000_aceite_contrato.sql` (colunas e bucket).
+2. Em `asaas-start-checkout`, ao criar a assinatura, gravar em `subscriptions`:
+   `company_name`, `cpf_cnpj`, `billing_email`, `phone` (do corpo da requisição),
+   `contract_version = body.acceptedContractVersion`, `contract_accepted_at = now()`,
+   `contract_accepted_ip` (header `x-forwarded-for`), e, se houver promoção,
+   `promo_label`, `promo_price`, `promo_cycles`, `promo_cycles_remaining = promo_cycles`, `regular_price`.
+   **Recusar** o checkout se `acceptedContractVersion` não vier.
+3. Criar conta no [Resend](https://resend.com), verificar o domínio de envio e cadastrar os secrets `RESEND_API_KEY`, `CONTRACT_FROM_EMAIL`, `APP_URL` e, se quiser cópia, `CONTRACT_BCC_EMAIL`.
+4. Publicar: `supabase functions deploy generate-contract --no-verify-jwt`.
+5. No webhook, no **primeiro** pagamento confirmado da assinatura, chamar `generate-contract` com `{ subscriptionId }` (exemplo no topo do arquivo da função).
+
+Para mudar o texto do contrato: editar `contractTemplate.ts`, subir `CONTRACT_VERSION` e rodar `npx tsx scripts/generate-contract-docs.ts` (atualiza `/contrato.html` e `docs/contrato-licenca-nox4.md`).
 
 ## 5. Teste antes de abrir as vendas
 
 - [ ] Comprar o plano mais barato (Essencial mensal) com cartão real da empresa.
-- [ ] Conferir: cobrança no painel do Asaas, assinatura ativa no NOX4, e-mail com o contrato recebido.
+- [ ] Conferir: cobrança no painel do Asaas, assinatura ativa no NOX4, e-mail recebido com o PDF do contrato preenchido com os dados da empresa.
 - [ ] Estornar a cobrança pelo painel do Asaas e cancelar a assinatura de teste.
 - [ ] Só então divulgar a landing page e a Black Friday.
