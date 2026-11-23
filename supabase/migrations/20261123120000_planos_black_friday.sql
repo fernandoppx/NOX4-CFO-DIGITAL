@@ -57,6 +57,19 @@ select n.name, n.tier, n.tier_order, n.highlight, n.billing_cycle, n.base_price,
   from novos n
  where not exists (select 1 from public.plans p where p.name = n.name);
 
+-- Planos anuais herdam o dia de renovação usado pelo plano anual antigo
+update public.plans novo
+   set renewal_month = antigo.renewal_month,
+       renewal_day   = antigo.renewal_day
+  from (select renewal_month, renewal_day
+          from public.plans
+         where tier is null and billing_cycle = 'yearly'
+         order by created_at
+         limit 1) antigo
+ where novo.tier is not null
+   and novo.billing_cycle = 'yearly'
+   and novo.renewal_month is null;
+
 -- 4) Conferência
 select name, billing_cycle, base_price, annual_price, included_users, max_organizations,
        promo_label, promo_price, promo_cycles, promo_ends_at, active
