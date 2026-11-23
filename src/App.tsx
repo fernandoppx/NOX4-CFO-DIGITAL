@@ -96,6 +96,33 @@ import {
   BankAccount,
 } from './types';
 
+/** Limites de espera na abertura do sistema */
+const AUTH_TIMEOUT_MS = 8000;
+const DATA_TIMEOUT_MS = 15000;
+
+class TimeoutError extends Error {}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new TimeoutError(`${label} excedeu ${ms}ms`)), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      }
+    );
+  });
+}
+
+function isNetworkError(err: unknown): boolean {
+  const msg = String((err as any)?.message || err || '');
+  return /failed to fetch|networkerror|network request failed|load failed/i.test(msg);
+}
+
 export default function App() {
   // Authentication & Multi-Tenant State (Supabase Auth & RLS)
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -204,16 +231,33 @@ export default function App() {
   const [selectedMonth, setSelectedMonth] = useState<string>(() => getCurrentYearMonth());
   const [isMobileNavOpen, setIsMobileNavOpen] = useState<boolean>(false);
 
-  // Unified sync of user context, roles, and organizations
-  const syncUserContext = async (userId: string, userEmail?: string, metadata?: any) => {
-    try {
-      const profile = await loadUserProfile(userId, userEmail, metadata);
-      const isGlobalAdmin = await isSystemAdmin(userId);
+  // Falha de conexão com o servidor na abertura (ex.: Supabase fora do ar)
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  // Evita carregar o contexto do usuário duas vezes na abertura (getSession + INITIAL_SESSION)
+  const syncStateRef = useRef<{ userId: string | null; inFlight: Promise<void> | null }>({ userId: null, inFlight: null });
 
-      // Claim pending invitations for user's email
-      if (userEmail) {
-        await claimPendingInvitations(userEmail, userId);
-      }
+  // Unified sync of user context, roles, and organizations
+  const syncUserContext = (userId: string, userEmail?: string, metadata?: any, force = false): Promise<void> => {
+    const state = syncStateRef.current;
+    if (!force && state.userId === userId) {
+      // Já carregado (ou carregando) para este usuário: reaproveita
+      return state.inFlight || Promise.resolve();
+    }
+    const run = runSyncUserContext(userId, userEmail, metadata).finally(() => {
+      if (syncStateRef.current.inFlight === run) syncStateRef.current.inFlight = null;
+    });
+    syncStateRef.current = { userId, inFlight: run };
+    return run;
+  };
+
+  const runSyncUserContext = async (userId: string, userEmail?: string, metadata?: any) => {
+    try {
+      // Consultas independentes em paralelo (antes eram 3 idas ao servidor em sequência)
+      const [profile, isGlobalAdmin] = await Promise.all([
+        loadUserProfile(userId, userEmail, metadata),
+        isSystemAdmin(userId),
+        userEmail ? claimPendingInvitations(userEmail, userId) : Promise.resolve(),
+      ]);
 
       // Load permitted organizations
       const orgs = await loadUserOrganizations(userId, isGlobalAdmin);
@@ -260,13 +304,23 @@ export default function App() {
       }
 
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+        // Sem limite de tempo, uma falha de rede deixava a tela de carregamento parada por ~30s
+        // enquanto o Supabase repetia a renovação do login.
+        const { data: { session }, error } = await withTimeout(
+          supabase.auth.getSession(),
+          AUTH_TIMEOUT_MS,
+          'getSession'
+        );
         if (error) {
           console.warn('Sessão Supabase não encontrada ou expirada:', error);
         }
         if (session?.user) {
           if (isMounted) {
-            await syncUserContext(session.user.id, session.user.email, session.user.user_metadata);
+            await withTimeout(
+              syncUserContext(session.user.id, session.user.email, session.user.user_metadata),
+              DATA_TIMEOUT_MS,
+              'syncUserContext'
+            );
           }
         } else {
           if (isMounted) {
@@ -278,6 +332,11 @@ export default function App() {
         }
       } catch (err) {
         console.error('Erro ao verificar sessão Supabase:', err);
+        if (isMounted && (err instanceof TimeoutError || isNetworkError(err))) {
+          setConnectionError(
+            'Não foi possível conectar ao servidor do NOX4. Verifique sua internet ou tente novamente em alguns minutos.'
+          );
+        }
       } finally {
         if (isMounted) {
           setIsAuthLoading(false);
@@ -305,10 +364,24 @@ export default function App() {
 
         if (session?.user) {
           if (isMounted) {
-            await syncUserContext(session.user.id, session.user.email, session.user.user_metadata);
-            setIsAuthLoading(false);
+            // Recomendação do Supabase: não aguardar outras chamadas dentro deste callback
+            // (pode travar a sessão). A sincronização roda logo em seguida, fora dele.
+            const { id, email, user_metadata } = session.user;
+            // Perfil alterado: recarrega mesmo sendo o mesmo usuário
+            const force = event === 'USER_UPDATED';
+            if (event === 'TOKEN_REFRESHED' && syncStateRef.current.userId === id) return;
+            setTimeout(() => {
+              syncUserContext(id, email, user_metadata, force)
+                .finally(() => {
+                  if (isMounted) {
+                    setConnectionError(null);
+                    setIsAuthLoading(false);
+                  }
+                });
+            }, 0);
           }
         } else {
+          syncStateRef.current = { userId: null, inFlight: null };
           if (isMounted) {
             setCurrentUser(null);
             setIsSysAdmin(false);
@@ -1894,6 +1967,23 @@ export default function App() {
   }
 
   // 3. Loading state during auth verification
+  if (!isAuthLoading && connectionError && !currentUser) {
+    return (
+      <div className="min-h-screen w-full bg-slate-950 flex flex-col items-center justify-center text-slate-200 px-6 text-center">
+        <NoxLogo size="md" layout="vertical" theme="dark" showSubtitle={true} />
+        <p className="mt-8 text-sm font-semibold text-white">Servidor indisponível no momento</p>
+        <p className="mt-2 text-xs text-slate-400 max-w-sm">{connectionError}</p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="mt-6 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold cursor-pointer"
+        >
+          Tentar novamente
+        </button>
+      </div>
+    );
+  }
+
   if (isAuthLoading) {
     return (
       <div className="min-h-screen w-full bg-slate-950 flex flex-col items-center justify-center text-slate-200">
@@ -1988,7 +2078,7 @@ export default function App() {
       <WaitingOrganizationView
         userEmail={currentUser.email}
         userName={currentUser.name}
-        onRefresh={() => syncUserContext(currentUser.id, currentUser.email)}
+        onRefresh={() => syncUserContext(currentUser.id, currentUser.email, undefined, true)}
         onLogout={handleLogout}
         onNavigateToPlans={() => navigateTo('/plans')}
       />
