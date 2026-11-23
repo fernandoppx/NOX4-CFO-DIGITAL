@@ -40,6 +40,8 @@ export interface ContractPurchase {
   extraUserPrice: number;
   extraCompanyPrice?: number | null;
   promo?: { label: string; price: number; cycles: number } | null;
+  /** Primeira cobrança, proporcional até a data de renovação do plano */
+  firstPaymentAmount?: number | null;
 }
 
 export interface ContractAcceptance {
@@ -118,13 +120,18 @@ export function buildContract(input: ContractInput = {}): ContractDocument {
       `Plano contratado: ${purchase.planName}, ciclo ${ciclo}.`,
       `Inclui: ${purchase.maxCompanies} ${purchase.maxCompanies === 1 ? 'empresa' : 'empresas'} e ${purchase.includedUsers} ${purchase.includedUsers === 1 ? 'usuário' : 'usuários'}.`,
     ];
+    if (purchase.firstPaymentAmount != null) {
+      linhas.push(
+        `Primeira cobrança: ${formatBRL(purchase.firstPaymentAmount)}, proporcional ao período entre a contratação e a data de renovação do plano. As cobranças seguintes são feitas por ciclo completo.`
+      );
+    }
     if (purchase.promo) {
       const periodo =
         purchase.cycle === 'yearly'
           ? purchase.promo.cycles === 1
-            ? 'no primeiro ano'
-            : `nos ${purchase.promo.cycles} primeiros anos`
-          : `nos ${purchase.promo.cycles} primeiros meses`;
+            ? 'no primeiro ano completo de assinatura'
+            : `nos ${purchase.promo.cycles} primeiros anos completos de assinatura`
+          : `nos ${purchase.promo.cycles} primeiros meses completos de assinatura`;
       linhas.push(
         `Valor promocional (${purchase.promo.label}): ${formatBRL(purchase.promo.price)} ${unidade} ${periodo}. Depois desse período, ${formatBRL(purchase.regularPrice)} ${unidade}, conforme a cláusula 2.`
       );
