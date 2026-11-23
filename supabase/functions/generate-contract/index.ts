@@ -6,13 +6,13 @@
 // e o registro do aceite. Guarda o PDF no Storage (bucket privado "contracts") e envia
 // por e-mail ao cliente, com o PDF anexado.
 //
-// Chamada pelo webhook do Asaas no PRIMEIRO pagamento confirmado da assinatura
-// (eventos PAYMENT_CONFIRMED / PAYMENT_RECEIVED), servidor para servidor:
+// Chamada pelo asaas-webhook logo depois de liberar a empresa (primeiro pagamento
+// confirmado), servidor para servidor. Lê os dados da tabela checkout_sessions:
 //
 //   await fetch(`${SUPABASE_URL}/functions/v1/generate-contract`, {
 //     method: 'POST',
 //     headers: { Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' },
-//     body: JSON.stringify({ subscriptionId }),
+//     body: JSON.stringify({ checkoutSessionId }),
 //   });
 //
 // Secrets (Supabase > Edge Functions > Secrets):
@@ -27,8 +27,8 @@
 //
 // Deploy: supabase functions deploy generate-contract --no-verify-jwt
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
-import * as PDFLib from 'https://esm.sh/pdf-lib@1.17.1';
+import { createClient } from 'npm:@supabase/supabase-js@2';
+import * as PDFLib from 'npm:pdf-lib@1.17.1';
 import { buildContract, CONTRACT_VERSION, formatBRL } from '../_shared/contractTemplate.ts';
 import { renderContractPdf } from '../_shared/contractPdf.ts';
 
@@ -53,7 +53,7 @@ const toBase64 = (bytes: Uint8Array) => {
 };
 
 const sha256Hex = async (bytes: Uint8Array) =>
-  Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)))
+  Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes as BufferSource)))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
 
@@ -85,21 +85,21 @@ Deno.serve(async (req) => {
   if ((req.headers.get('Authorization') || '') !== `Bearer ${SERVICE_ROLE}`) return json(401, { error: 'unauthorized' });
   if (!RESEND_API_KEY || !FROM || !APP_URL) return json(500, { error: 'email_not_configured' });
 
-  const { subscriptionId } = await req.json().catch(() => ({}));
-  if (!subscriptionId) return json(400, { error: 'subscriptionId_required' });
+  const { checkoutSessionId } = await req.json().catch(() => ({}));
+  if (!checkoutSessionId) return json(400, { error: 'checkoutSessionId_required' });
 
   const db = createClient(SUPABASE_URL, SERVICE_ROLE);
 
   const { data: sub, error } = await db
-    .from('subscriptions')
+    .from('checkout_sessions')
     .select(
-      'id, organization_id, billing_email, company_name, cpf_cnpj, phone, contract_version, contract_accepted_at, contract_accepted_ip, contract_email_sent_at, promo_label, promo_price, promo_cycles, regular_price, plan:plans(name, billing_cycle, base_price, annual_price, max_organizations, included_users, extra_user_price, extra_company_price)'
+      'id, organization_id, amount, billing_email, company_name, cpf_cnpj, phone, contract_version, contract_accepted_at, contract_accepted_ip, contract_email_sent_at, promo_label, promo_price, promo_cycles, regular_price, plan:plans(name, billing_cycle, base_price, annual_price, max_organizations, included_users, extra_user_price, extra_company_price)'
     )
-    .eq('id', subscriptionId)
+    .eq('id', checkoutSessionId)
     .maybeSingle();
 
   if (error) return json(500, { error: error.message });
-  if (!sub) return json(404, { error: 'subscription_not_found' });
+  if (!sub) return json(404, { error: 'checkout_not_found' });
   if (sub.contract_email_sent_at) return json(200, { ok: true, alreadySent: true });
   if (!sub.billing_email || !sub.company_name || !sub.cpf_cnpj) return json(422, { error: 'customer_data_missing' });
   if (!sub.contract_accepted_at) return json(422, { error: 'contract_not_accepted' });
@@ -133,6 +133,7 @@ Deno.serve(async (req) => {
         sub.promo_price && sub.promo_cycles
           ? { label: sub.promo_label || 'Condição promocional', price: Number(sub.promo_price), cycles: sub.promo_cycles }
           : null,
+      firstPaymentAmount: sub.amount != null ? Number(sub.amount) : null,
     },
     acceptance: {
       acceptedAt: sub.contract_accepted_at,
@@ -185,12 +186,12 @@ Deno.serve(async (req) => {
 
   if (!res.ok) {
     // PDF já está salvo; grava o caminho para reenviar depois
-    await db.from('subscriptions').update({ contract_pdf_path: path, contract_pdf_sha256: hash }).eq('id', sub.id);
+    await db.from('checkout_sessions').update({ contract_pdf_path: path, contract_pdf_sha256: hash }).eq('id', sub.id);
     return json(502, { error: 'email_send_failed', detail: await res.text() });
   }
 
   await db
-    .from('subscriptions')
+    .from('checkout_sessions')
     .update({
       contract_pdf_path: path,
       contract_pdf_sha256: hash,
