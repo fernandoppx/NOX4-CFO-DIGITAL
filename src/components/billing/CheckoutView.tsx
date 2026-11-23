@@ -18,7 +18,7 @@ import {
 import { NoxLogo } from '../brand/NoxLogo';
 import { Plan, User } from '../../types';
 import { supabase } from '../../lib/supabase';
-import { fetchPlanById, formatCurrencyBRL, AsaasStartCheckoutResponse } from '../../lib/billingService';
+import { fetchPlanById, formatCurrencyBRL, AsaasStartCheckoutResponse, getActivePromo } from '../../lib/billingService';
 import { formatBillingErrorMessage } from '../../lib/billingErrorMessages';
 
 // Conexão à Edge Function asaas-start-checkout
@@ -290,6 +290,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   const basePrice = plan?.base_price ?? (isYearly ? 89.90 : 109.90);
   const annualPrice = plan?.annual_price ?? (isYearly ? 1078.80 : 0);
   const annualMonthlyEquivalent = annualPrice > 0 ? annualPrice / 12 : basePrice;
+  // Promoção vigente (ex.: Black Friday). Informativo: o valor cobrado vem da Edge Function.
+  const promo = getActivePromo(plan);
 
   // 8. VALOR:
   // Mostrar o valor usando: data.plan.basePrice formatado em BRL.
@@ -877,6 +879,17 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                         </>
                       )}
 
+                      {promo && (
+                        <div className="flex items-start justify-between gap-3 p-2.5 rounded-lg bg-amber-400/10 border border-amber-400/30">
+                          <span className="text-amber-300 font-bold">{promo.label} (-{promo.percentOff}%)</span>
+                          <span className="text-right text-amber-100">
+                            {isYearly
+                              ? `${formatCurrencyBRL(promo.price)} no 1º ano`
+                              : `${formatCurrencyBRL(promo.price)}/mês nos ${promo.cycles} primeiros meses`}
+                          </span>
+                        </div>
+                      )}
+
                       {/* CIAs Incluídas */}
                       <div className="flex items-center justify-between pt-1">
                         <span className="text-slate-400 flex items-center gap-1.5">
@@ -924,17 +937,22 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                           Total Inicial
                         </span>
                         <div className="text-right">
+                          {promo && (
+                            <div className="text-[11px] text-slate-500 line-through">
+                              {formatCurrencyBRL(promo.regularPrice)}
+                            </div>
+                          )}
                           {!isYearly ? (
                             <div className="flex items-baseline gap-1">
                               <span className="text-2xl font-extrabold text-white">
-                                {formatCurrencyBRL(plan.base_price ?? 109.90)}
+                                {formatCurrencyBRL(promo ? promo.price : plan.base_price ?? 109.90)}
                               </span>
                               <span className="text-[11px] text-slate-400">/ mês</span>
                             </div>
                           ) : (
                             <div className="flex items-baseline gap-1">
                               <span className="text-2xl font-extrabold text-white">
-                                {formatCurrencyBRL(plan.annual_price ?? 1078.80)}
+                                {formatCurrencyBRL(promo ? promo.price : plan.annual_price ?? 1078.80)}
                               </span>
                               <span className="text-[11px] text-slate-400">/ ano</span>
                             </div>
@@ -942,7 +960,11 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                         </div>
                       </div>
                       <p className="text-[11px] text-slate-500 text-right">
-                        {!isYearly
+                        {promo
+                          ? isYearly
+                            ? `Depois do 1º ano, ${formatCurrencyBRL(promo.regularPrice)}/ano`
+                            : `A partir do ${promo.cycles + 1}º mês, ${formatCurrencyBRL(promo.regularPrice)}/mês`
+                          : !isYearly
                           ? 'Cobrança recorrente mensal'
                           : 'Cobrança recorrente anual'}
                       </p>
