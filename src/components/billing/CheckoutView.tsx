@@ -1003,7 +1003,10 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                         >
                           Contrato de Licença de Uso do NOX4 (v{CONTRACT_VERSION})
                         </a>
-                        . Uma cópia será enviada para o e-mail de cobrança após a confirmação do pagamento.
+                        . O contrato em PDF sai em nome de{' '}
+                        <strong className="text-slate-100">{companyName.trim() || 'sua empresa'}</strong>
+                        {cnpjDisplay.trim() ? ` (${cnpjDisplay.trim()})` : ''}, com o plano escolhido, e é enviado para o e-mail de
+                        cobrança após a confirmação do pagamento.
                       </span>
                     </label>
 
