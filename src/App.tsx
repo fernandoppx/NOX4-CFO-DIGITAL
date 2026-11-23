@@ -96,6 +96,33 @@ import {
   BankAccount,
 } from './types';
 
+/** Limites de espera na abertura do sistema */
+const AUTH_TIMEOUT_MS = 8000;
+const DATA_TIMEOUT_MS = 15000;
+
+class TimeoutError extends Error {}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new TimeoutError(`${label} excedeu ${ms}ms`)), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      }
+    );
+  });
+}
+
+function isNetworkError(err: unknown): boolean {
+  const msg = String((err as any)?.message || err || '');
+  return /failed to fetch|networkerror|network request failed|load failed/i.test(msg);
+}
+
 export default function App() {
   // Authentication & Multi-Tenant State (Supabase Auth & RLS)
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -204,16 +231,33 @@ export default function App() {
   const [selectedMonth, setSelectedMonth] = useState<string>(() => getCurrentYearMonth());
   const [isMobileNavOpen, setIsMobileNavOpen] = useState<boolean>(false);
 
-  // Unified sync of user context, roles, and organizations
-  const syncUserContext = async (userId: string, userEmail?: string, metadata?: any) => {
-    try {
-      const profile = await loadUserProfile(userId, userEmail, metadata);
-      const isGlobalAdmin = await isSystemAdmin(userId);
+  // Falha de conexão com o servidor na abertura (ex.: Supabase fora do ar)
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  // Evita carregar o contexto do usuário duas vezes na abertura (getSession + INITIAL_SESSION)
+  const syncStateRef = useRef<{ userId: string | null; inFlight: Promise<void> | null }>({ userId: null, inFlight: null });
 
-      // Claim pending invitations for user's email
-      if (userEmail) {
-        await claimPendingInvitations(userEmail, userId);
-      }
+  // Unified sync of user context, roles, and organizations
+  const syncUserContext = (userId: string, userEmail?: string, metadata?: any, force = false): Promise<void> => {
+    const state = syncStateRef.current;
+    if (!force && state.userId === userId) {
+      // Já carregado (ou carregando) para este usuário: reaproveita
+      return state.inFlight || Promise.resolve();
+    }
+    const run = runSyncUserContext(userId, userEmail, metadata).finally(() => {
+      if (syncStateRef.current.inFlight === run) syncStateRef.current.inFlight = null;
+    });
+    syncStateRef.current = { userId, inFlight: run };
+    return run;
+  };
+
+  const runSyncUserContext = async (userId: string, userEmail?: string, metadata?: any) => {
+    try {
+      // Consultas independentes em paralelo (antes eram 3 idas ao servidor em sequência)
+      const [profile, isGlobalAdmin] = await Promise.all([
+        loadUserProfile(userId, userEmail, metadata),
+        isSystemAdmin(userId),
+        userEmail ? claimPendingInvitations(userEmail, userId) : Promise.resolve(),
+      ]);
 
       // Load permitted organizations
       const orgs = await loadUserOrganizations(userId, isGlobalAdmin);
@@ -260,13 +304,23 @@ export default function App() {
       }
 
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+        // Sem limite de tempo, uma falha de rede deixava a tela de carregamento parada por ~30s
+        // enquanto o Supabase repetia a renovação do login.
+        const { data: { session }, error } = await withTimeout(
+          supabase.auth.getSession(),
+          AUTH_TIMEOUT_MS,
+          'getSession'
+        );
         if (error) {
           console.warn('Sessão Supabase não encontrada ou expirada:', error);
         }
         if (session?.user) {
           if (isMounted) {
-            await syncUserContext(session.user.id, session.user.email, session.user.user_metadata);
+            await withTimeout(
+              syncUserContext(session.user.id, session.user.email, session.user.user_metadata),
+              DATA_TIMEOUT_MS,
+              'syncUserContext'
+            );
           }
         } else {
           if (isMounted) {
@@ -278,6 +332,11 @@ export default function App() {
         }
       } catch (err) {
         console.error('Erro ao verificar sessão Supabase:', err);
+        if (isMounted && (err instanceof TimeoutError || isNetworkError(err))) {
+          setConnectionError(
+            'Não foi possível conectar ao servidor do NOX4. Verifique sua internet ou tente novamente em alguns minutos.'
+          );
+        }
       } finally {
         if (isMounted) {
           setIsAuthLoading(false);
@@ -305,10 +364,24 @@ export default function App() {
 
         if (session?.user) {
           if (isMounted) {
-            await syncUserContext(session.user.id, session.user.email, session.user.user_metadata);
-            setIsAuthLoading(false);
+            // Recomendação do Supabase: não aguardar outras chamadas dentro deste callback
+            // (pode travar a sessão). A sincronização roda logo em seguida, fora dele.
+            const { id, email, user_metadata } = session.user;
+            // Perfil alterado: recarrega mesmo sendo o mesmo usuário
+            const force = event === 'USER_UPDATED';
+            if (event === 'TOKEN_REFRESHED' && syncStateRef.current.userId === id) return;
+            setTimeout(() => {
+              syncUserContext(id, email, user_metadata, force)
+                .finally(() => {
+                  if (isMounted) {
+                    setConnectionError(null);
+                    setIsAuthLoading(false);
+                  }
+                });
+            }, 0);
           }
         } else {
+          syncStateRef.current = { userId: null, inFlight: null };
           if (isMounted) {
             setCurrentUser(null);
             setIsSysAdmin(false);
@@ -668,7 +741,8 @@ export default function App() {
       code: 'REC',
       group: 'revenue',
       active: rc.active,
-    }));
+      rev_type: rc.type,
+    } as Category));
     const expCats: Category[] = companyExpenseCategories.map((ec) => ({
       id: ec.id,
       company_id: ec.company_id,
@@ -798,22 +872,23 @@ export default function App() {
 
   // Tab Titles map
   const tabTitles: Record<NavTab, string> = {
-    dashboard: 'Dashboard Executivo',
-    revenues: 'Lançamentos de Receitas',
-    expenses: 'Lançamentos de Despesas & Custos',
+    // Títulos curtos, iguais ao menu lateral, para não serem cortados no topo
+    dashboard: 'Dashboard',
+    revenues: 'Receitas',
+    expenses: 'Despesas',
     receivables: 'Contas a Receber',
     payables: 'Contas a Pagar',
-    cashflow: 'Fluxo de Caixa & Tesouraria',
-    dre: 'DRE Gerencial Oficial',
-    clients: 'Gestão de Clientes & Contratos',
+    cashflow: 'Fluxo de Caixa',
+    dre: 'DRE Gerencial',
+    clients: 'Clientes',
     products: 'Produtos & Serviços',
-    cost_centers: 'Centros de Resultado (BU)',
-    budget: 'Orçamento (Budget) x Realizado',
-    partners: 'Sócios, Pró-labore & Patrimônio',
-    team: 'Equipe da Empresa',
-    settings: 'Configurações & Governança',
+    cost_centers: 'Centros de Resultado',
+    budget: 'Orçamento',
+    partners: 'Sócios & Patrimônio',
+    team: 'Equipe',
+    settings: 'Configurações',
     billing: 'Plano e Cobrança',
-    admin_panel: 'Painel Global do System Admin',
+    admin_panel: 'System Admin',
   };
 
   // State Action Handlers
@@ -1716,10 +1791,30 @@ export default function App() {
       return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : fallback;
     };
 
+    // Coluna opcional de categoria: busca pelo nome no Plano de Contas (sem diferenciar maiúsculas/acentos)
+    const norm = (t: string) =>
+      (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    const findRevCat = (name?: string) => {
+      if (!name) return undefined;
+      const n = norm(name);
+      return companyRevenueCategories.find((c) => c.active !== false && (norm(c.name) === n || norm(c.name).includes(n)));
+    };
+    const findExpCat = (name?: string) => {
+      if (!name) return undefined;
+      const n = norm(name);
+      return companyExpenseCategories.find(
+        (c) => c.active !== false && c.group !== 'equity' && (norm(c.name) === n || norm(c.name).includes(n))
+      );
+    };
+    // Coluna opcional de status: pago/recebido/liquidado → liquidado; qualquer outro → pendente
+    const parseSettled = (v?: string) => /^(pago|paga|recebido|recebida|liquidado|quitado)$/i.test(norm(v || ''));
+
     let ok = 0;
     let skipped = 0;
+    let categoryFallbacks = 0;
     for (const line of lines) {
-      const parts = line.split(';').map((p) => p.trim());
+      // Aceita ";" ou tabulação (colar direto do Excel/Google Sheets)
+      const parts = line.split(line.includes(';') ? ';' : '\t').map((p) => p.trim());
       if (parts.length < 2) {
         skipped++;
         continue;
@@ -1733,13 +1828,18 @@ export default function App() {
       const compDate = parseDate(parts[2], `${selectedMonth}-01`);
       const dueDate = parseDate(parts[3], compDate);
 
+      const settled = parseSettled(parts[5]);
+
       if (type === 'revenues') {
-        if (!defaultRevCat) break;
+        const matchedCat = findRevCat(parts[4]);
+        if (parts[4] && !matchedCat) categoryFallbacks++;
+        const cat = matchedCat || defaultRevCat;
+        if (!cat) break;
         const saved = await handleAddRevenue({
           company_id: selectedCompanyId,
           description,
           cost_center_id: defaultCC?.id,
-          category_id: defaultRevCat.id,
+          category_id: cat.id,
           gross_amount: amount,
           tax_amount: 0,
           commission_amount: 0,
@@ -1747,23 +1847,30 @@ export default function App() {
           net_amount: amount,
           competence_date: compDate,
           due_date: dueDate,
-          status: 'pending',
+          received_date: settled ? dueDate : undefined,
+          payment_date: settled ? dueDate : undefined,
+          status: settled ? 'received' : 'pending',
         });
         if (saved) ok++;
         else skipped++;
       } else {
-        if (!defaultExpCat) break;
+        const matchedCat = findExpCat(parts[4]);
+        if (parts[4] && !matchedCat) categoryFallbacks++;
+        const cat = matchedCat || defaultExpCat;
+        if (!cat) break;
         const saved = await handleAddExpense({
           company_id: selectedCompanyId,
           description,
           supplier: '',
           cost_center_id: defaultCC?.id,
-          category_id: defaultExpCat.id,
+          category_id: cat.id,
           amount,
-          cost_nature: 'FIXED',
+          cost_nature: cat.type === 'variable' ? 'VARIABLE' : 'FIXED',
           competence_date: compDate,
           due_date: dueDate,
-          status: 'pending',
+          paid_date: settled ? dueDate : undefined,
+          payment_date: settled ? dueDate : undefined,
+          status: settled ? 'paid' : 'pending',
           is_equity_movement: false,
         });
         if (saved) ok++;
@@ -1771,8 +1878,11 @@ export default function App() {
       }
     }
     return (
-      `Importação concluída: ${ok} lançamento(s) importado(s)${skipped ? `, ${skipped} linha(s) ignorada(s)` : ''}. ` +
-      'Eles entraram como pendentes, na categoria padrão: revise categoria e status em cada um.'
+      `Importação concluída: ${ok} lançamento(s) importado(s)${skipped ? `, ${skipped} linha(s) ignorada(s)` : ''}.` +
+      (categoryFallbacks
+        ? ` ${categoryFallbacks} linha(s) com categoria não encontrada foram para a categoria padrão: revise-as.`
+        : '') +
+      ' Linhas sem status entram como pendentes.'
     );
   };
 
@@ -1857,6 +1967,23 @@ export default function App() {
   }
 
   // 3. Loading state during auth verification
+  if (!isAuthLoading && connectionError && !currentUser) {
+    return (
+      <div className="min-h-screen w-full bg-slate-950 flex flex-col items-center justify-center text-slate-200 px-6 text-center">
+        <NoxLogo size="md" layout="vertical" theme="dark" showSubtitle={true} />
+        <p className="mt-8 text-sm font-semibold text-white">Servidor indisponível no momento</p>
+        <p className="mt-2 text-xs text-slate-400 max-w-sm">{connectionError}</p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="mt-6 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold cursor-pointer"
+        >
+          Tentar novamente
+        </button>
+      </div>
+    );
+  }
+
   if (isAuthLoading) {
     return (
       <div className="min-h-screen w-full bg-slate-950 flex flex-col items-center justify-center text-slate-200">
@@ -1951,7 +2078,7 @@ export default function App() {
       <WaitingOrganizationView
         userEmail={currentUser.email}
         userName={currentUser.name}
-        onRefresh={() => syncUserContext(currentUser.id, currentUser.email)}
+        onRefresh={() => syncUserContext(currentUser.id, currentUser.email, undefined, true)}
         onLogout={handleLogout}
         onNavigateToPlans={() => navigateTo('/plans')}
       />
@@ -1994,6 +2121,11 @@ export default function App() {
           onNavigateSettings={() => setCurrentTab('settings')}
           onUpdateUser={handleUpdateUser}
           onOpenMobileNav={() => setIsMobileNavOpen(true)}
+          currentUserRole={currentUserRole}
+          isSystemAdmin={isSysAdmin}
+          // As telas que dependem de período já têm filtro próprio (sincronizado com o mesmo estado);
+          // as demais não dependem de mês. Desligado para não duplicar o filtro.
+          showPeriodFilter={false}
         />
 
         {/* View Router */}
@@ -2197,6 +2329,7 @@ export default function App() {
               currentUserRole={currentUserRole}
               currentUserId={currentUser.id}
               currentUserAvatar={currentUser.avatar}
+              currentUserEmail={currentUser.email}
             />
           )}
 
@@ -2251,6 +2384,11 @@ export default function App() {
         onAddRevenue={handleAddRevenue}
         onAddExpense={handleAddExpense}
         onManageCategories={() => setCurrentTab('settings')}
+        knownSuppliers={(
+          Array.from(
+            new Set(companyExpenses.map((e: Expense) => String(e.supplier || '').trim()).filter(Boolean))
+          ) as string[]
+        ).sort((a, b) => a.localeCompare(b, 'pt-BR'))}
       />
 
       {/* Global Edit Transaction Modal */}

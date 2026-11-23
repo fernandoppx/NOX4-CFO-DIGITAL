@@ -83,7 +83,7 @@ export const InternalPreviewApp: React.FC<InternalPreviewAppProps> = ({ onExitPr
   // Modais de transações e formulários
   const [isNewTransactionModalOpen, setIsNewTransactionModalOpen] = useState(false);
   const [newTransactionType, setNewTransactionType] = useState<'revenue' | 'expense'>('revenue');
-  const [newTransactionDefaultStatus, setNewTransactionDefaultStatus] = useState<'pending' | 'received' | 'paid'>('received');
+  const [newTransactionDefaultStatus, setNewTransactionDefaultStatus] = useState<'pending' | 'received' | 'paid'>('pending');
   const [editingRevenue, setEditingRevenue] = useState<Revenue | null>(null);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [isEditCompanyModalOpen, setIsEditCompanyModalOpen] = useState(false);

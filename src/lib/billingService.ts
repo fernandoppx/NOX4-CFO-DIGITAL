@@ -218,9 +218,7 @@ export function interpretSubscriptionStatus(status?: SubscriptionStatus | string
  */
 export async function fetchActivePlans(): Promise<{ data: Plan[] | null; error: Error | null }> {
   try {
-    const { data, error } = await supabase
-      .from('plans')
-      .select(`
+    const baseColumns = `
         id,
         name,
         base_price,
@@ -229,10 +227,33 @@ export async function fetchActivePlans(): Promise<{ data: Plan[] | null; error: 
         included_users,
         extra_user_price,
         max_organizations,
-        active
-      `)
+        active`;
+    // Colunas da nova tabela de planos (migração 20261123_planos_black_friday).
+    // Se a migração ainda não foi aplicada, cai para as colunas antigas.
+    const extendedColumns = `${baseColumns},
+        tier,
+        tier_order,
+        highlight,
+        extra_company_price,
+        promo_label,
+        promo_price,
+        promo_cycles,
+        promo_starts_at,
+        promo_ends_at`;
+
+    let { data, error }: { data: any[] | null; error: any } = await supabase
+      .from('plans')
+      .select(extendedColumns)
       .eq('active', true)
       .order('base_price', { ascending: true });
+
+    if (error && /column|does not exist|42703/i.test(`${(error as any).code || ''} ${error.message || ''}`)) {
+      ({ data, error } = await supabase
+        .from('plans')
+        .select(baseColumns)
+        .eq('active', true)
+        .order('base_price', { ascending: true }));
+    }
 
     if (error) {
       console.error('Erro ao carregar planos:', error);
@@ -747,3 +768,40 @@ export async function invokeAsaasUpdateCreditCard(
 
 
 
+
+
+/**
+ * Promoção vigente do plano (ex.: Black Friday), ou null.
+ * Só vale dentro de promo_starts_at..promo_ends_at e com promo_price menor que o preço do ciclo.
+ * O valor exibido aqui é informativo: quem cobra é a Edge Function, a partir do banco.
+ */
+export interface ActivePromo {
+  label: string;
+  /** Valor cobrado por ciclo durante a promoção (mês ou ano) */
+  price: number;
+  /** Preço cheio do mesmo ciclo */
+  regularPrice: number;
+  /** Quantos ciclos com o valor promocional */
+  cycles: number;
+  percentOff: number;
+  endsAt: Date | null;
+}
+
+export function getActivePromo(plan: Plan | null | undefined, now: Date = new Date()): ActivePromo | null {
+  if (!plan || plan.promo_price == null || !(plan.promo_price > 0)) return null;
+  const starts = plan.promo_starts_at ? new Date(plan.promo_starts_at) : null;
+  const ends = plan.promo_ends_at ? new Date(plan.promo_ends_at) : null;
+  if (starts && now < starts) return null;
+  if (ends && now > ends) return null;
+  const yearly = plan.billing_cycle === 'yearly';
+  const regularPrice = yearly ? Number(plan.annual_price || 0) : Number(plan.base_price || 0);
+  if (!(regularPrice > 0) || plan.promo_price >= regularPrice) return null;
+  return {
+    label: plan.promo_label || 'Oferta',
+    price: Number(plan.promo_price),
+    regularPrice,
+    cycles: Math.max(1, Number(plan.promo_cycles || 1)),
+    percentOff: Math.round((1 - plan.promo_price / regularPrice) * 100),
+    endsAt: ends,
+  };
+}

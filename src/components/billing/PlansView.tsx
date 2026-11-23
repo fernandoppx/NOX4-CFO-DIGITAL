@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { NoxLogo } from '../brand/NoxLogo';
 import { Plan, User } from '../../types';
-import { fetchActivePlans, formatCurrencyBRL } from '../../lib/billingService';
+import { fetchActivePlans, formatCurrencyBRL, getActivePromo } from '../../lib/billingService';
 import { formatBillingErrorMessage } from '../../lib/billingErrorMessages';
 
 interface PlansViewProps {
@@ -83,17 +83,28 @@ export const PlansView: React.FC<PlansViewProps> = ({
     p.name?.toLowerCase().includes('anual') ||
     Boolean(p.annual_price && p.annual_price > 0 && p.billing_cycle !== 'monthly');
 
-  // Ordena para garantir NOX4 Mensal à esquerda e NOX4 Anual à direita
-  const sortedPlans = [...plans].sort((a, b) => {
-    const aYearly = isYearlyPlan(a);
-    const bYearly = isYearlyPlan(b);
-    if (!aYearly && bYearly) return -1;
-    if (aYearly && !bYearly) return 1;
-    return (b.base_price ?? 0) - (a.base_price ?? 0);
-  });
+  // Nova tabela de planos: cada plano (tier) tem versão mensal e anual
+  const hasTiers = plans.some((p) => Boolean(p.tier));
+  const [cycle, setCycle] = useState<'monthly' | 'yearly'>('yearly');
 
-  const monthlyRef = sortedPlans.find((p) => !isYearlyPlan(p)) || sortedPlans[0];
-  const monthlyBasePrice = monthlyRef?.base_price ?? 109.90;
+  const visiblePlans = [...plans]
+    .filter((p) => !hasTiers || (cycle === 'yearly' ? isYearlyPlan(p) : !isYearlyPlan(p)))
+    .sort((a, b) => {
+      if (hasTiers) return (a.tier_order ?? 99) - (b.tier_order ?? 99);
+      // Tabela antiga: Mensal à esquerda, Anual à direita
+      const ay = isYearlyPlan(a);
+      const by = isYearlyPlan(b);
+      if (!ay && by) return -1;
+      if (ay && !by) return 1;
+      return (b.base_price ?? 0) - (a.base_price ?? 0);
+    });
+
+  const activePromos = plans.map((p) => getActivePromo(p)).filter(Boolean) as NonNullable<ReturnType<typeof getActivePromo>>[];
+  const anyPromo = activePromos[0] || null;
+  const maxPercentOff = activePromos.reduce((m, p) => Math.max(m, p.percentOff), 0);
+  const displayName = (p: Plan) => (hasTiers ? p.name.replace(/\s+(Mensal|Anual)$/i, '') : p.name);
+  const formatDateShort = (d: Date) =>
+    d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' });
 
   return (
     <div className="min-h-screen w-full bg-slate-950 text-slate-100 flex flex-col justify-between relative overflow-x-hidden font-sans">
@@ -211,91 +222,120 @@ export const PlansView: React.FC<PlansViewProps> = ({
           </div>
         )}
 
+        {/* Black Friday / promoção vigente */}
+        {!isLoading && !errorMessage && anyPromo && (
+          <div className="w-full max-w-5xl mx-auto mb-6 rounded-2xl border border-amber-400/40 bg-amber-400/10 px-5 py-3 text-center text-sm text-amber-200">
+            <strong className="text-amber-300">{anyPromo.label}:</strong> até {maxPercentOff}% de desconto nos planos
+            {anyPromo.endsAt ? `, válido até ${formatDateShort(anyPromo.endsAt)}` : ''}.
+          </div>
+        )}
+
+        {/* Mensal x Anual */}
+        {!isLoading && !errorMessage && hasTiers && (
+          <div className="mb-10 inline-flex rounded-xl border border-slate-800 bg-slate-900 p-1" role="group" aria-label="Forma de pagamento">
+            {(['monthly', 'yearly'] as const).map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setCycle(c)}
+                aria-pressed={cycle === c}
+                className={`min-h-[40px] px-5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  cycle === c ? 'bg-blue-600 text-white' : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                {c === 'monthly' ? 'Mensal' : 'Anual · 2 meses grátis'}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Plans Grid */}
-        {!isLoading && !errorMessage && sortedPlans.length > 0 && (
-          <div className="w-full max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 items-stretch">
-            {sortedPlans.map((plan) => {
+        {!isLoading && !errorMessage && visiblePlans.length > 0 && (
+          <div
+            className={`w-full mx-auto grid grid-cols-1 gap-6 lg:gap-8 items-stretch ${
+              visiblePlans.length >= 3 ? 'max-w-6xl md:grid-cols-3' : 'max-w-4xl md:grid-cols-2'
+            }`}
+          >
+            {visiblePlans.map((plan) => {
               const isYearly = isYearlyPlan(plan);
-              const yearlyAnnualPrice = plan.annual_price ?? (plan.base_price ? plan.base_price * 12 : 1078.80);
-              const annualSavings = (monthlyBasePrice * 12) - yearlyAnnualPrice;
+              const promo = getActivePromo(plan);
+              const cyclePrice = isYearly
+                ? plan.annual_price ?? (plan.base_price ? plan.base_price * 12 : 0)
+                : plan.base_price ?? 0;
+              const monthlyEquivalent = isYearly ? cyclePrice / 12 : cyclePrice;
+              const featured = hasTiers ? Boolean(plan.highlight) : isYearly;
 
               return (
                 <div
                   key={plan.id}
                   id={`plan-card-${plan.id}`}
                   className={`flex flex-col justify-between rounded-2xl p-6 sm:p-8 transition-all duration-200 relative ${
-                    isYearly
+                    featured
                       ? 'bg-gradient-to-b from-slate-900 via-slate-900 to-blue-950/20 border-2 border-blue-500/60 shadow-2xl shadow-blue-950/50 ring-1 ring-blue-500/30'
                       : 'bg-slate-900/90 border border-slate-800 hover:border-slate-700 shadow-xl'
                   }`}
                 >
-                  {isYearly && (
+                  {featured && (
                     <div
                       id="badge-more-advantageous"
-                      className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-3.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-[11px] font-extrabold uppercase tracking-wider shadow-lg backdrop-blur-sm"
+                      className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-3.5 py-1 rounded-full bg-blue-600 text-white text-[11px] font-extrabold uppercase tracking-wider shadow-lg"
                     >
-                      MAIS VANTAJOSO
+                      {hasTiers ? 'Recomendado' : 'Mais vantajoso'}
                     </div>
                   )}
 
                   <div className="space-y-5">
-                    {/* Header Plan */}
-                    <div>
-                      <h2 className="text-2xl font-bold text-white tracking-tight font-heading">
-                        {plan.name}
-                      </h2>
+                    <div className="flex items-center justify-between gap-2">
+                      <h2 className="text-2xl font-bold text-white tracking-tight font-heading">{displayName(plan)}</h2>
+                      {promo && (
+                        <span className="shrink-0 px-2 py-0.5 rounded-md bg-amber-400 text-slate-950 text-[11px] font-extrabold">
+                          -{promo.percentOff}%
+                        </span>
+                      )}
                     </div>
 
                     {/* Pricing */}
-                    {isYearly ? (
-                      <div className="py-3 border-y border-slate-800/80 space-y-1.5">
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-                            {formatCurrencyBRL(plan.base_price ?? (plan.annual_price ? plan.annual_price / 12 : 89.90))}
-                          </span>
-                          <span className="text-xs font-semibold text-slate-400">
-                            /mês equivalente
-                          </span>
-                        </div>
-                        <p className="text-xs font-medium text-slate-300">
-                          {formatCurrencyBRL(yearlyAnnualPrice)} cobrado anualmente
-                        </p>
-                        {annualSavings > 0 && (
-                          <div className="pt-0.5">
-                            <span
-                              id="badge-annual-savings"
-                              className="inline-block px-2.5 py-1 rounded-md text-[11px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30"
-                            >
-                              Economize {formatCurrencyBRL(annualSavings)} por ano
+                    <div className="py-3 border-y border-slate-800/80 space-y-1.5">
+                      {promo ? (
+                        <>
+                          <p className="text-xs text-slate-400 line-through">
+                            {formatCurrencyBRL(monthlyEquivalent)}/mês
+                          </p>
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                              {formatCurrencyBRL(isYearly ? promo.price / 12 : promo.price)}
+                            </span>
+                            <span className="text-xs font-semibold text-slate-400">/mês</span>
+                          </div>
+                          <p className="text-xs font-medium text-amber-200">
+                            {isYearly
+                              ? `${formatCurrencyBRL(promo.price)} no 1º ano. Depois, ${formatCurrencyBRL(cyclePrice)}/ano.`
+                              : `Nos ${promo.cycles} primeiros meses. Depois, ${formatCurrencyBRL(cyclePrice)}/mês.`}
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                              {formatCurrencyBRL(monthlyEquivalent)}
+                            </span>
+                            <span className="text-xs font-semibold text-slate-400">
+                              {isYearly ? '/mês equivalente' : '/mês'}
                             </span>
                           </div>
-                        )}
-                        <p className="text-xs text-slate-400 pt-0.5">
-                          Melhor custo-benefício com pagamento anual.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="py-3 border-y border-slate-800/80 space-y-1">
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-                            {formatCurrencyBRL(plan.base_price ?? 109.90)}
-                          </span>
-                          <span className="text-xs font-semibold text-slate-400">
-                            /mês
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-400">
-                          Mais flexibilidade, cobrança mensal.
-                        </p>
-                      </div>
-                    )}
+                          <p className="text-xs text-slate-400">
+                            {isYearly ? `${formatCurrencyBRL(cyclePrice)} cobrado anualmente.` : 'Cobrança mensal, cancele quando quiser.'}
+                          </p>
+                        </>
+                      )}
+                    </div>
 
                     {/* Operational Limits and Features */}
                     <div className="space-y-2.5 text-xs text-slate-300">
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                         <span className="font-medium text-slate-200">
-                          {plan.max_organizations} {plan.max_organizations === 1 ? 'CIA' : 'CIAs'}
+                          {plan.max_organizations} {plan.max_organizations === 1 ? 'empresa' : 'empresas'}
                         </span>
                       </div>
 
@@ -314,28 +354,32 @@ export const PlansView: React.FC<PlansViewProps> = ({
                       ))}
                     </div>
 
-                    {/* Extra User */}
-                    <div className="pt-3 border-t border-slate-800/60 text-xs">
-                      <span className="text-slate-400">Usuário adicional: </span>
-                      <strong className="text-slate-200">
-                        {formatCurrencyBRL(plan.extra_user_price)}/mês
-                      </strong>
+                    <div className="pt-3 border-t border-slate-800/60 text-xs space-y-1">
+                      <div>
+                        <span className="text-slate-400">Usuário adicional: </span>
+                        <strong className="text-slate-200">{formatCurrencyBRL(plan.extra_user_price)}/mês</strong>
+                      </div>
+                      {plan.extra_company_price ? (
+                        <div>
+                          <span className="text-slate-400">Empresa adicional: </span>
+                          <strong className="text-slate-200">{formatCurrencyBRL(plan.extra_company_price)}/mês</strong>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 
-                  {/* Action Button */}
                   <div className="pt-6 mt-6 border-t border-slate-800/80">
                     <button
                       id={isYearly ? 'btn-select-plan-yearly' : 'btn-select-plan-monthly'}
                       type="button"
                       onClick={() => handleChoosePlan(plan)}
                       className={`w-full py-3.5 px-4 rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                        isYearly
+                        featured
                           ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30'
                           : 'bg-slate-800 hover:bg-slate-700 text-white'
                       }`}
                     >
-                      <span>{isYearly ? 'CONTRATAR ANUAL' : 'CONTRATAR MENSAL'}</span>
+                      <span>{hasTiers ? `Contratar ${displayName(plan).replace(/^NOX4\s+/i, '')}` : isYearly ? 'Contratar anual' : 'Contratar mensal'}</span>
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>

@@ -10,6 +10,8 @@ export function formatCurrency(value: number | undefined | null): string {
   if (value === undefined || value === null || isNaN(value)) {
     return 'R$ 0,00';
   }
+  // Evita "-R$ 0,00" para zero negativo ou resíduos de arredondamento
+  if (Math.abs(value) < 0.005) value = 0;
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
@@ -185,7 +187,7 @@ export function addDaysISO(dateISO: string, days: number): string {
 
 /** Nome em português dos grupos do plano de contas. */
 export const EXPENSE_GROUP_LABELS: Record<string, string> = {
-  revenue: 'Receita',
+  revenue: 'Receitas Operacionais',
   deductions: 'Deduções da Receita',
   cost_of_services: 'Custos dos Serviços (CSP)',
   commercial: 'Despesas Comerciais',
@@ -194,13 +196,13 @@ export const EXPENSE_GROUP_LABELS: Record<string, string> = {
   depreciation: 'Depreciação',
   financial: 'Resultado Financeiro',
   taxes_profit: 'Impostos sobre o Lucro',
-  equity: 'Movimentação de Sócios',
+  equity: 'Movimentação de Sócios (fora da DRE)',
 };
 
 export function getGroupLabel(group?: string | null): string {
   if (!group) return '';
   const key = String(group).toLowerCase();
-  if (key === 'revenue' || group === 'REVENUE') return 'Receita';
+  if (key === 'revenue' || group === 'REVENUE') return 'Receitas Operacionais';
   return EXPENSE_GROUP_LABELS[key] || group;
 }
 
@@ -220,4 +222,33 @@ export function formatAxisCurrency(value: number): string {
   if (abs >= 1_000_000) return `${sign}R$ ${(abs / 1_000_000).toFixed(1).replace('.', ',')} mi`;
   if (abs >= 1_000) return `${sign}R$ ${(abs / 1_000).toFixed(abs >= 10_000 ? 0 : 1).replace('.', ',')} mil`;
   return `${sign}R$ ${Math.round(abs)}`;
+}
+
+/** Rótulo único do papel do usuário (topo, menu do perfil e barra lateral usam o mesmo texto). */
+export function getRoleLabel(role?: string | null, isSystemAdmin = false): string {
+  if (isSystemAdmin || role === 'system_admin') return 'System Admin';
+  switch (role) {
+    case 'owner':
+    case 'admin':
+      return 'Proprietário';
+    case 'finance':
+    case 'financial_analyst':
+      return 'Financeiro';
+    case 'manager':
+      return 'Gestor';
+    case 'viewer':
+      return 'Visualizador';
+    default:
+      return 'Membro';
+  }
+}
+
+/** "2026-11" → "nov/2026" (rótulo curto e consistente para períodos). */
+export function formatPeriodLabel(period?: string | null): string {
+  if (!period) return '';
+  const [y, m] = String(period).split('-');
+  const months = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  const idx = Number(m) - 1;
+  if (!y || isNaN(idx) || idx < 0 || idx > 11) return String(period);
+  return `${months[idx]}/${y}`;
 }

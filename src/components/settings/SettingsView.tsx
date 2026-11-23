@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { countActiveOrganizationMembers } from '../../lib/billingService';
+import { supabase } from '../../lib/supabase';
 import {
   Building2,
   Database,
@@ -38,6 +40,19 @@ import { ManageCompanyUsersModal } from './ManageCompanyUsersModal';
 import { EditUserModal } from './EditUserModal';
 import { EditCategoryModal, CategoryFormData } from './EditCategoryModal';
 import { getGroupLabel } from '../../lib/utils';
+
+const DRE_GROUP_ORDER = [
+  'revenue',
+  'deductions',
+  'cost_of_services',
+  'commercial',
+  'administrative',
+  'operational',
+  'depreciation',
+  'financial',
+  'taxes_profit',
+  'equity',
+];
 import { TeamManagementTab } from './TeamManagementTab';
 import { PlanAndBillingView } from './PlanAndBillingView';
 import { formatFinancialErrorMessage } from '../../lib/financialErrorMessages';
@@ -110,6 +125,36 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [activeSubTab, setActiveSubTab] = useState<
     'team' | 'companies' | 'users' | 'categories' | 'import' | 'database' | 'billing'
   >(initialSubTab && initialSubTab !== 'team' && initialSubTab !== 'users' ? initialSubTab : 'categories');
+
+  const [signingOutAll, setSigningOutAll] = useState(false);
+
+  // Contagem real de membros por empresa (mesma fonte de Equipe e Plano e Cobrança)
+  const [memberCounts, setMemberCounts] = useState<Record<string, number>>({});
+  const companyIdsKey = companies.map((c) => c.id).join('|');
+  useEffect(() => {
+    if (activeSubTab !== 'companies') return;
+    if (previewMembers.length > 0) {
+      const counts: Record<string, number> = {};
+      companies.forEach((c) => {
+        counts[c.id] = previewMembers.filter((m: any) => !m.organization_id || m.organization_id === c.id).length;
+      });
+      setMemberCounts(counts);
+      return;
+    }
+    let cancelled = false;
+    Promise.all(
+      companies.map(async (c) => {
+        const { count, error } = await countActiveOrganizationMembers(c.id);
+        return [c.id, error ? 0 : count] as const;
+      })
+    ).then((entries) => {
+      if (!cancelled) setMemberCounts(Object.fromEntries(entries));
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSubTab, companyIdsKey, previewMembers.length]);
 
   // Company Modals state
   const [isEditCompanyModalOpen, setIsEditCompanyModalOpen] = useState(false);
@@ -495,6 +540,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 const ids = u.company_ids || (u.company_id ? [u.company_id] : []);
                 return ids.includes(c.id);
               });
+              // Mesma fonte usada em Equipe e Plano e Cobrança (organization_members)
+              const memberCount = Math.max(companyUsers.length, memberCounts[c.id] ?? 0);
 
               return (
                 <div
@@ -589,7 +636,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         <span>Usuários Cadastrados</span>
                       </div>
                       <span className="text-[11px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
-                        {companyUsers.length} {companyUsers.length === 1 ? 'membro' : 'membros'}
+                        {memberCount} {memberCount === 1 ? 'membro' : 'membros'}
                       </span>
                     </div>
 
@@ -841,11 +888,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           {Object.entries(
             categories.reduce<Record<string, Category[]>>((acc, cat) => {
-              const key = cat.type === 'REVENUE' || cat.group === 'revenue' ? 'revenue' : String(cat.group || 'operational');
+              const isRevenue = cat.type === 'REVENUE' || cat.group === 'revenue';
+              // Receitas financeiras ficam no Resultado Financeiro (abaixo do EBITDA), como na DRE
+              const key = isRevenue
+                ? (cat as any).rev_type === 'financial'
+                  ? 'financial'
+                  : 'revenue'
+                : String(cat.group || 'operational');
               (acc[key] = acc[key] || []).push(cat);
               return acc;
             }, {})
-          ).map(([group, cats]) => (
+          )
+            .sort(
+              ([a], [b]) =>
+                (DRE_GROUP_ORDER.indexOf(a) === -1 ? 99 : DRE_GROUP_ORDER.indexOf(a)) -
+                (DRE_GROUP_ORDER.indexOf(b) === -1 ? 99 : DRE_GROUP_ORDER.indexOf(b))
+            )
+            .map(([group, cats]) => (
             <div key={group} className="space-y-2">
               <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{getGroupLabel(group)}</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -861,8 +920,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       <div className="text-[10px] text-slate-400">
                         {cat.active === false
                           ? 'Desativada (tem lançamentos antigos)'
-                          : group === 'revenue'
-                          ? 'Receita'
+                          : (cat as any).rev_type === 'financial'
+                          ? 'Receita financeira · abaixo do EBITDA'
+                          : cat.group === 'revenue' || cat.type === 'REVENUE'
+                          ? 'Receita operacional'
+                          : group === 'equity'
+                          ? 'Movimentação patrimonial · fora da DRE'
                           : (cat as any).cost_type === 'variable'
                           ? 'Custo variável'
                           : 'Custo fixo'}
@@ -902,9 +965,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <h3 className="text-sm font-bold text-slate-800 font-heading">
             Importação de Lançamentos via CSV / Texto
           </h3>
-          <p className="text-xs text-slate-500">
-            Cole as linhas no formato: <code className="text-blue-600 font-mono">Descrição; Valor; Competência (AAAA-MM-DD); Vencimento (AAAA-MM-DD)</code>
-          </p>
+          <div className="text-xs text-slate-500 space-y-1">
+            <p>
+              Uma linha por lançamento, colunas separadas por <strong>;</strong> (ou cole direto do Excel/Google Sheets):
+            </p>
+            <code className="block text-blue-600 font-mono bg-slate-50 border border-slate-200 rounded-md px-2 py-1">
+              Descrição; Valor; Competência; Vencimento; Categoria (opcional); Status (opcional)
+            </code>
+            <p>
+              Valor no formato brasileiro (<code>8.500,00</code>) ou com ponto (<code>8500.00</code>). Datas em{' '}
+              <code>DD/MM/AAAA</code> ou <code>AAAA-MM-DD</code>. Categoria pelo nome do Plano de Contas. Status:{' '}
+              <code>pago</code>/<code>recebido</code> ou em branco para pendente.
+            </p>
+          </div>
 
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
@@ -931,11 +1004,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           <textarea
             rows={6}
-            placeholder={`Exemplo:\nConsultoria Estratégica Setembro; 8500.00; 2026-09-01; 2026-09-10\nLicença Softwares Tech; 1200.00; 2026-09-01; 2026-09-05`}
+            placeholder={`Exemplo:\nConsultoria Estratégica Setembro; 8.500,00; 01/09/2026; 10/09/2026; Receita de Consultorias; recebido\nLicença Softwares Tech; 1.200,00; 01/09/2026; 05/09/2026; Assinaturas & Softwares de Gestão`}
             value={csvText}
             onChange={(e) => setCsvText(e.target.value)}
             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 font-mono outline-none focus:border-blue-500 focus:bg-white"
           />
+
+          <label className="inline-flex items-center gap-2 text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer">
+            <Upload className="w-3.5 h-3.5" />
+            <span>Ou carregar arquivo .csv / .txt</span>
+            <input
+              type="file"
+              accept=".csv,.txt,text/csv,text/plain"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const text = await file.text();
+                setCsvText(text);
+                e.target.value = '';
+              }}
+            />
+          </label>
 
           <div className="flex items-center justify-between">
             {importSuccess && (
@@ -966,18 +1056,53 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
 
           <p className="text-xs text-slate-600 leading-relaxed">
-            O sistema opera com isolamento rigoroso de informações financeiras. Cada organização possui um ambiente de dados segregado e protegido. Nenhuma visualização ou relatório cruza dados entre diferentes empresas sem autorização explícita dos gestores.
+            Os dados financeiros de cada empresa ficam separados no banco (políticas de acesso por organização no
+            Supabase). Só os membros vinculados à empresa, conforme o papel definido em Equipe, conseguem ler ou alterar
+            lançamentos.
           </p>
 
-          <div className="bg-slate-900 p-4 rounded-lg border border-slate-800 text-xs text-slate-300 space-y-2">
-            <div className="flex items-center gap-2 text-emerald-400 font-medium">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>Proteção e Isolamento Contínuo de Dados Ativado</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1">
+              <div className="font-bold text-slate-800">Isolamento por empresa</div>
+              <p className="text-slate-500">Ativo · regras de acesso por organização no banco de dados.</p>
             </div>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              Todos os registros contábeis, categorias, centros de custo e lançamentos bancários são restritos estritamente aos membros autorizados de cada empresa.
-            </p>
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1">
+              <div className="font-bold text-slate-800">Controle de acesso</div>
+              <p className="text-slate-500">Papéis Proprietário, Financeiro e Visualizador, gerenciados em Equipe.</p>
+            </div>
           </div>
+
+          <div className="p-4 border border-slate-200 rounded-xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="font-bold text-slate-800">Encerrar sessões em todos os dispositivos</div>
+              <p className="text-slate-500 mt-0.5">
+                Use se você acessou o NOX4 em um computador de terceiros ou suspeita de acesso indevido. Você precisará
+                entrar de novo.
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={isPreviewMode || signingOutAll}
+              onClick={async () => {
+                if (!window.confirm('Encerrar sua sessão em todos os dispositivos, incluindo este?')) return;
+                setSigningOutAll(true);
+                try {
+                  await supabase.auth.signOut({ scope: 'global' });
+                  window.location.href = '/login';
+                } catch {
+                  setSigningOutAll(false);
+                  window.alert('Não foi possível encerrar as sessões agora. Tente de novo.');
+                }
+              }}
+              className="shrink-0 px-3.5 py-2 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded-lg font-bold disabled:opacity-50 cursor-pointer"
+            >
+              {signingOutAll ? 'Encerrando…' : 'Encerrar todas as sessões'}
+            </button>
+          </div>
+
+          <p className="text-[11px] text-slate-400">
+            Verificação em duas etapas e histórico de acessos ainda não estão disponíveis.
+          </p>
         </div>
       )}
 

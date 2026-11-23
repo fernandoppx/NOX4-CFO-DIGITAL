@@ -22,6 +22,18 @@ export interface Plan {
   billing_cycle?: 'monthly' | 'yearly' | string;
   active?: boolean;
   created_at?: string;
+  /** Agrupa as versões mensal e anual do mesmo plano (essencial, profissional, grupo) */
+  tier?: string | null;
+  tier_order?: number | null;
+  /** Plano em destaque na vitrine */
+  highlight?: boolean | null;
+  extra_company_price?: number | null;
+  /** Promoção (ex.: Black Friday): valor cobrado por ciclo durante promo_cycles ciclos */
+  promo_label?: string | null;
+  promo_price?: number | null;
+  promo_cycles?: number | null;
+  promo_starts_at?: string | null;
+  promo_ends_at?: string | null;
 }
 
 export interface Subscription {

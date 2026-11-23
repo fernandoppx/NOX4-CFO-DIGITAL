@@ -27,10 +27,28 @@ interface NewTransactionModalProps {
   onAddExpense: (exp: Omit<Expense, 'id' | 'created_at'>) => Promise<boolean | void> | boolean | void;
   /** Leva o usuário ao Plano de Contas (Configurações) */
   onManageCategories?: () => void;
+  /** Fornecedores já usados na empresa, sugeridos ao digitar (evita nomes duplicados) */
+  knownSuppliers?: string[];
 }
 
 const inputBase =
   'w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 outline-none focus:bg-white';
+
+/** Natureza do custo vem do Plano de Contas para não contradizer a classificação da conta */
+const natureFromCategory = (cat?: Category): 'FIXED' | 'VARIABLE' =>
+  (cat as any)?.cost_type === 'variable' ? 'VARIABLE' : 'FIXED';
+
+const DRE_EXPENSE_GROUP_ORDER = [
+  'deductions',
+  'cost_of_services',
+  'commercial',
+  'administrative',
+  'operational',
+  'depreciation',
+  'financial',
+  'taxes_profit',
+  'equity',
+];
 
 const emptyRevForm = (today: string) => ({
   description: '',
@@ -45,7 +63,8 @@ const emptyRevForm = (today: string) => ({
   competence_date: today,
   due_date: addDaysISO(today, 15),
   received_date: today,
-  status: 'received' as TransactionStatus,
+  // Padrão seguro: só entra no caixa quando o usuário confirmar o recebimento
+  status: 'pending' as TransactionStatus,
   notes: '',
 });
 
@@ -59,7 +78,8 @@ const emptyExpForm = (today: string) => ({
   competence_date: today,
   due_date: addDaysISO(today, 15),
   paid_date: today,
-  status: 'paid' as TransactionStatus,
+  // Padrão seguro: só sai do caixa quando o usuário confirmar o pagamento
+  status: 'pending' as TransactionStatus,
   is_equity_movement: false,
   notes: '',
 });
@@ -78,6 +98,7 @@ export const NewTransactionModal: React.FC<NewTransactionModalProps> = ({
   onAddRevenue,
   onAddExpense,
   onManageCategories,
+  knownSuppliers = [],
 }) => {
   const activeCompanyId = selectedCompanyId || currentCompanyId;
   const today = getTodayISO();
@@ -97,9 +118,21 @@ export const NewTransactionModal: React.FC<NewTransactionModalProps> = ({
   );
   const activeCostCenters = useMemo(() => costCenters.filter((c) => c.active !== false), [costCenters]);
 
+  const isDirty =
+    revForm.description.trim() !== '' ||
+    revForm.gross_amount.trim() !== '' ||
+    revForm.tax_percent.trim() !== '' ||
+    revForm.commission_percent.trim() !== '' ||
+    revForm.other_deductions.trim() !== '' ||
+    expForm.description.trim() !== '' ||
+    expForm.supplier.trim() !== '' ||
+    expForm.amount.trim() !== '';
+
   const handleClose = useCallback(() => {
-    if (!isSaving) onClose();
-  }, [isSaving, onClose]);
+    if (isSaving) return;
+    if (isDirty && !window.confirm('Descartar este lançamento? Os dados preenchidos serão perdidos.')) return;
+    onClose();
+  }, [isSaving, isDirty, onClose]);
   useEscapeKey(isOpen, handleClose);
 
   // Ao abrir: limpa o formulário, aplica tipo/status e escolhe os padrões disponíveis
@@ -110,11 +143,11 @@ export const NewTransactionModal: React.FC<NewTransactionModalProps> = ({
     setTransactionType(initialType || 'revenue');
     setRevForm({
       ...emptyRevForm(t),
-      status: normalized ? (normalized === 'paid' ? 'received' : normalized) : 'received',
+      status: normalized ? (normalized === 'paid' ? 'received' : normalized) : 'pending',
     });
     setExpForm({
       ...emptyExpForm(t),
-      status: normalized ? (normalized === 'received' ? 'paid' : normalized) : 'paid',
+      status: normalized ? (normalized === 'received' ? 'paid' : normalized) : 'pending',
     });
     setErrorMessage(null);
     setIsSaving(false);
@@ -133,9 +166,13 @@ export const NewTransactionModal: React.FC<NewTransactionModalProps> = ({
     }));
     setExpForm((prev) => {
       const nonEquity = expCategories.find((c) => c.group !== 'equity' && c.group !== 'deductions');
+      const categoryId = expCategories.some((c) => c.id === prev.category_id)
+        ? prev.category_id
+        : nonEquity?.id || expCategories[0]?.id || '';
       return {
         ...prev,
-        category_id: expCategories.some((c) => c.id === prev.category_id) ? prev.category_id : nonEquity?.id || expCategories[0]?.id || '',
+        category_id: categoryId,
+        cost_nature: natureFromCategory(expCategories.find((c) => c.id === categoryId)),
         cost_center_id: activeCostCenters.some((c) => c.id === prev.cost_center_id)
           ? prev.cost_center_id
           : activeCostCenters[0]?.id || '',
@@ -253,11 +290,19 @@ export const NewTransactionModal: React.FC<NewTransactionModalProps> = ({
   };
 
   // Agrupa as categorias de despesa por grupo do DRE
-  const expCategoryGroups = expCategories.reduce<Record<string, Category[]>>((acc, c) => {
-    const g = String(c.group || 'operational');
-    (acc[g] = acc[g] || []).push(c);
-    return acc;
-  }, {});
+  const expCategoryGroups = Object.fromEntries(
+    Object.entries(
+      expCategories.reduce<Record<string, Category[]>>((acc, c) => {
+        const g = String(c.group || 'operational');
+        (acc[g] = acc[g] || []).push(c);
+        return acc;
+      }, {})
+    ).sort(([a], [b]) => {
+      const ia = DRE_EXPENSE_GROUP_ORDER.indexOf(a);
+      const ib = DRE_EXPENSE_GROUP_ORDER.indexOf(b);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    })
+  );
 
   const noCategories = transactionType === 'revenue' ? revCategories.length === 0 : expCategories.length === 0;
 
@@ -597,10 +642,17 @@ export const NewTransactionModal: React.FC<NewTransactionModalProps> = ({
                 <input
                   type="text"
                   placeholder="Ex: Imobiliária, AWS, Meta Ads"
+                  list="nox4-known-suppliers"
+                  autoComplete="off"
                   value={expForm.supplier}
                   onChange={(e) => setExpForm({ ...expForm, supplier: e.target.value })}
                   className={`${inputBase} focus:border-rose-500`}
                 />
+                <datalist id="nox4-known-suppliers">
+                  {knownSuppliers.map((name) => (
+                    <option key={name} value={name} />
+                  ))}
+                </datalist>
               </div>
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">Categoria (Plano de Contas) *</label>
@@ -611,6 +663,7 @@ export const NewTransactionModal: React.FC<NewTransactionModalProps> = ({
                     setExpForm({
                       ...expForm,
                       category_id: e.target.value,
+                      cost_nature: natureFromCategory(cat),
                       is_equity_movement: cat?.group === 'equity' ? true : expForm.is_equity_movement && cat?.group === 'equity',
                     });
                   }}
@@ -644,7 +697,9 @@ export const NewTransactionModal: React.FC<NewTransactionModalProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Natureza do custo</label>
+                <label className="block text-slate-700 font-semibold mb-1" title="Definida pela conta escolhida no Plano de Contas. Altere só se este lançamento for exceção.">
+                  Natureza do custo
+                </label>
                 <select
                   value={expForm.cost_nature}
                   onChange={(e) => setExpForm({ ...expForm, cost_nature: e.target.value as any })}

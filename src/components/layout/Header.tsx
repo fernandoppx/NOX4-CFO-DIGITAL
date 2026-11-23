@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { getRoleLabel as getSharedRoleLabel } from '../../lib/utils';
 import {
   Building2,
   Plus,
@@ -28,9 +29,17 @@ interface HeaderProps {
   onOpenCreateCompany?: () => void;
   /** Abre o menu lateral no celular */
   onOpenMobileNav?: () => void;
+  /** Mostra o filtro global de período (desligado nas telas que têm filtro próprio ou não dependem de período) */
+  showPeriodFilter?: boolean;
+  /** Papel efetivo na empresa ativa (mesmo usado na barra lateral) */
+  currentUserRole?: string;
+  isSystemAdmin?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
+  currentUserRole,
+  showPeriodFilter = true,
+  isSystemAdmin = false,
   companies,
   currentCompanyId,
   onSelectCompany,
@@ -67,24 +76,7 @@ export const Header: React.FC<HeaderProps> = ({
     return name.slice(0, 2).toUpperCase();
   };
 
-  const getRoleLabel = (role?: string) => {
-    switch (role) {
-      case 'system_admin':
-        return 'Administrador Geral (System Admin)';
-      case 'owner':
-      case 'admin':
-        return 'Sócio / Proprietário (Owner)';
-      case 'finance':
-      case 'financial_analyst':
-        return 'Equipe Financeira (Finance)';
-      case 'manager':
-        return 'Gestor';
-      case 'viewer':
-        return 'Visualizador';
-      default:
-        return 'Usuário';
-    }
-  };
+  const roleLabel = getSharedRoleLabel(currentUserRole || currentUser?.role, isSystemAdmin);
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 px-3 sm:px-8 flex items-center justify-between gap-2 z-10 sticky top-0 shadow-sm">
@@ -100,7 +92,10 @@ export const Header: React.FC<HeaderProps> = ({
             <Menu className="w-5 h-5" />
           </button>
         )}
-        <h1 className="hidden md:block text-base sm:text-lg font-bold text-slate-800 font-heading tracking-tight truncate">
+        <h1
+          className="hidden md:block text-base sm:text-lg font-bold text-slate-800 font-heading tracking-tight truncate shrink-0 max-w-[260px]"
+          title={activeTabTitle}
+        >
           {activeTabTitle}
         </h1>
 
@@ -128,10 +123,12 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Action Controls */}
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         {/* Month Selector Component */}
-        <MonthPickerFilter
-          selectedMonth={selectedMonth}
-          onSelectMonth={onSelectMonth}
-        />
+        {showPeriodFilter && (
+          <MonthPickerFilter
+            selectedMonth={selectedMonth}
+            onSelectMonth={onSelectMonth}
+          />
+        )}
 
         {/* Quick New Transaction Modal */}
         <button
@@ -169,7 +166,7 @@ export const Header: React.FC<HeaderProps> = ({
                   {currentUser.name}
                 </span>
                 <span className="text-[10px] text-slate-500 leading-tight">
-                  {currentUser.role === 'admin' ? 'CFO / Admin' : 'Usuário'}
+                  {roleLabel}
                 </span>
               </div>
               <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:inline" />
@@ -185,7 +182,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <p className="text-[11px] text-slate-500 truncate">{currentUser.email}</p>
                   <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-[10px] font-bold">
                     <Shield className="w-3 h-3" />
-                    <span>{getRoleLabel(currentUser.role)}</span>
+                    <span>{roleLabel}</span>
                   </div>
                 </div>
 

@@ -324,7 +324,14 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
               {filteredExpenses.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-xs text-slate-500">
-                    Nenhuma despesa encontrada para os filtros selecionados.
+                    <p>Nenhuma despesa encontrada para os filtros selecionados.</p>
+                    <button
+                      type="button"
+                      onClick={onOpenNewExpenseModal}
+                      className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
+                    >
+                      + Lançar despesa
+                    </button>
                   </td>
                 </tr>
               ) : (
