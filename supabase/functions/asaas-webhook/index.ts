@@ -20,6 +20,120 @@ function jsonResponse(
   })
 }
 
+// Copia o aceite do contrato e a condição comercial do checkout para a assinatura
+// e dispara a geração do contrato (PDF + e-mail). Nunca derruba o webhook.
+async function finalizeSubscription(admin: any, checkout: any) {
+  try {
+    if (!checkout?.asaas_subscription_id) return
+
+    const { data: sub, error: subError } = await admin
+      .from('subscriptions')
+      .select('id, contract_accepted_at, contract_email_sent_at')
+      .eq('provider_subscription_id', checkout.asaas_subscription_id)
+      .maybeSingle()
+
+    if (subError || !sub) {
+      console.error('Assinatura não encontrada para o contrato:', subError?.message || checkout.asaas_subscription_id)
+      return
+    }
+
+    if (!sub.contract_accepted_at && checkout.contract_accepted_at) {
+      const { error: copyError } = await admin
+        .from('subscriptions')
+        .update({
+          company_name: checkout.company_name,
+          cpf_cnpj: checkout.cpf_cnpj,
+          billing_email: checkout.billing_email,
+          phone: checkout.phone,
+          contract_version: checkout.contract_version,
+          contract_accepted_at: checkout.contract_accepted_at,
+          contract_accepted_ip: checkout.contract_accepted_ip,
+          promo_label: checkout.promo_label,
+          promo_price: checkout.promo_price,
+          promo_cycles: checkout.promo_cycles,
+          promo_cycles_remaining: Number(checkout.promo_cycles || 0),
+          regular_price: checkout.regular_price,
+        })
+        .eq('id', sub.id)
+
+      if (copyError) {
+        console.error('Erro ao copiar aceite para a assinatura:', copyError.message)
+        return
+      }
+    }
+
+    if (sub.contract_email_sent_at || !checkout.contract_accepted_at) return
+
+    const response = await fetch(
+      Deno.env.get('SUPABASE_URL') + '/functions/v1/generate-contract',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ subscriptionId: sub.id }),
+      },
+    )
+
+    if (!response.ok) {
+      console.error('generate-contract falhou:', response.status, await response.text())
+    }
+  } catch (error) {
+    console.error('Erro ao finalizar assinatura:', error instanceof Error ? error.message : error)
+  }
+}
+
+// Mensalidades/anuidades seguintes: conta os ciclos promocionais e, ao fim deles,
+// volta a assinatura do Asaas ao preço cheio. Ignora pagamentos repetidos.
+async function applyPromoCycle(admin: any, payment: any, event: string) {
+  try {
+    if (!payment?.subscription) return
+
+    const { error: dupError } = await admin
+      .from('asaas_processed_payments')
+      .insert({ payment_id: payment.id, event })
+
+    if (dupError) return // já processado (ou tabela indisponível)
+
+    const { data: sub } = await admin
+      .from('subscriptions')
+      .select('id, promo_cycles_remaining, regular_price')
+      .eq('provider_subscription_id', payment.subscription)
+      .maybeSingle()
+
+    if (!sub || !(Number(sub.promo_cycles_remaining) > 0)) return
+
+    const remaining = Number(sub.promo_cycles_remaining) - 1
+
+    await admin
+      .from('subscriptions')
+      .update({ promo_cycles_remaining: remaining })
+      .eq('id', sub.id)
+
+    if (remaining > 0 || !(Number(sub.regular_price) > 0)) return
+
+    const apiKey = Deno.env.get('ASAAS_API_KEY')
+    const baseUrl = (Deno.env.get('ASAAS_BASE_URL') || '').replace(/\/+$/, '')
+    if (!apiKey || !baseUrl) return
+
+    const response = await fetch(baseUrl + '/subscriptions/' + payment.subscription, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', access_token: apiKey },
+      body: JSON.stringify({
+        value: Number(sub.regular_price),
+        updatePendingPayments: true,
+      }),
+    })
+
+    if (!response.ok) {
+      console.error('Erro ao voltar ao preço cheio:', response.status, await response.text())
+    }
+  } catch (error) {
+    console.error('Erro no ciclo promocional:', error instanceof Error ? error.message : error)
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', {
@@ -269,6 +383,8 @@ Deno.serve(async (req: Request) => {
         checkout.id,
       )
 
+      await applyPromoCycle(admin, payment, event)
+
       return jsonResponse({
         received: true,
         alreadyProvisioned: true,
@@ -365,6 +481,9 @@ Deno.serve(async (req: Request) => {
       'CIA provisionada com sucesso:',
       organizationId,
     )
+
+    // Contrato: copia o aceite para a assinatura e envia o PDF por e-mail
+    await finalizeSubscription(admin, checkout)
 
     // =========================================================
     // 9. SUCESSO
