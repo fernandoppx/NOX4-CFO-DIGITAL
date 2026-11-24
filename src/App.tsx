@@ -36,8 +36,7 @@ import {
   isSystemAdmin,
   claimPendingInvitations,
   getUserRoleInOrganization,
-  createOrganizationRPC,
-} from './lib/supabaseAuth';
+  createOrganizationRPC, OrganizationCreationDeniedError } from './lib/supabaseAuth';
 
 import { createEmptyDatabase, DatabaseState } from './lib/mockDatabase';
 import {
@@ -1580,6 +1579,10 @@ export default function App() {
       return newComp;
     } catch (err) {
       console.error('Erro ao adicionar empresa:', err);
+      if (err instanceof OrganizationCreationDeniedError) {
+        setDataNotice(err.message);
+        return null as unknown as Company;
+      }
       const fallbackComp: Company = {
         ...c,
         id: `comp_${Date.now()}`,
