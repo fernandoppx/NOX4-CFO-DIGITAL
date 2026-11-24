@@ -463,6 +463,19 @@ Deno.serve(async (req: Request) => {
       )
     }
 
+    if (
+      typeof body.acceptedContractVersion !== 'string' ||
+      !body.acceptedContractVersion.trim()
+    ) {
+      return jsonResponse(
+        {
+          error:
+            'É preciso aceitar o Contrato de Licença de Uso para continuar.',
+        },
+        400,
+      )
+    }
+
     if (!billingEmail) {
       return jsonResponse(
         {
@@ -540,7 +553,12 @@ Deno.serve(async (req: Request) => {
           max_organizations,
           renewal_month,
           renewal_day,
-          active
+          active,
+          promo_label,
+          promo_price,
+          promo_cycles,
+          promo_starts_at,
+          promo_ends_at
         `)
         .eq(
           'id',
@@ -628,10 +646,29 @@ Deno.serve(async (req: Request) => {
           10,
       )
 
-    const fullCycleAmount =
+    const regularCycleAmount =
       billingCycle === 'monthly'
         ? basePrice
         : Number(annualPrice)
+
+    // Promoção vigente (ex.: Black Friday). O valor vem sempre do banco, nunca do navegador.
+    const nowTs = Date.now()
+    const promoPrice =
+      plan.promo_price == null ? null : Number(plan.promo_price)
+    const promoActive =
+      promoPrice !== null &&
+      Number.isFinite(promoPrice) &&
+      promoPrice > 0 &&
+      promoPrice < regularCycleAmount &&
+      (!plan.promo_starts_at || nowTs >= new Date(plan.promo_starts_at).getTime()) &&
+      (!plan.promo_ends_at || nowTs <= new Date(plan.promo_ends_at).getTime())
+    const promoCycles = promoActive
+      ? Math.max(1, Number(plan.promo_cycles || 1))
+      : 0
+    // Valor de cada ciclo cobrado agora (promocional quando houver promoção)
+    const fullCycleAmount = promoActive
+      ? Number(promoPrice)
+      : regularCycleAmount
 
     if (
       !Number.isFinite(basePrice) ||
@@ -836,6 +873,35 @@ Deno.serve(async (req: Request) => {
 
       checkoutSession =
         createdSession
+    }
+
+    // Aceite do contrato e condição comercial congelados na sessão de checkout.
+    // O asaas-webhook copia esses dados para a assinatura quando o pagamento é confirmado.
+    {
+      const acceptedContractVersion =
+        String(body.acceptedContractVersion || '').trim().slice(0, 20)
+      const forwardedFor =
+        req.headers.get('x-forwarded-for') || ''
+      const { error: contractError } = await admin
+        .from('checkout_sessions')
+        .update({
+          contract_version: acceptedContractVersion || null,
+          contract_accepted_at: new Date().toISOString(),
+          contract_accepted_ip: forwardedFor.split(',')[0].trim() || null,
+          promo_label: promoActive ? (plan.promo_label || 'Oferta') : null,
+          promo_price: promoActive ? fullCycleAmount : null,
+          promo_cycles: promoActive ? promoCycles : null,
+          regular_price: regularCycleAmount,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', checkoutSession.id)
+
+      if (contractError) {
+        console.error(
+          'Erro ao gravar aceite do contrato:',
+          contractError.message,
+        )
+      }
     }
 
     // =====================================================
