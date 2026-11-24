@@ -73,6 +73,52 @@ export const SystemAdminPanel: React.FC<SystemAdminPanelProps> = ({
     fetchAdminStats();
   }, [allCompanies.length]);
 
+  // Liberar acesso de teste (sem cobrança) para um cliente
+  const [trialEmail, setTrialEmail] = useState('');
+  const [trialCompany, setTrialCompany] = useState('');
+  const [trialDocument, setTrialDocument] = useState('');
+  const [trialDays, setTrialDays] = useState('30');
+  const [trialLoading, setTrialLoading] = useState(false);
+  const [trialMessage, setTrialMessage] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
+
+  const handleGrantTrial = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (trialLoading) return;
+    setTrialMessage(null);
+    setTrialLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('admin_grant_test_access', {
+        p_email: trialEmail.trim(),
+        p_company_name: trialCompany.trim(),
+        p_document: trialDocument.trim() || null,
+        p_segment: 'Serviços / Consultoria',
+        p_days: Math.max(1, parseInt(trialDays, 10) || 30),
+      });
+      if (error) throw error;
+      const mode = (data as { mode?: string } | null)?.mode;
+      setTrialMessage({
+        type: 'ok',
+        text:
+          mode === 'member'
+            ? `Acesso liberado. ${trialEmail.trim()} já pode entrar no NOX4 como Proprietário de ${trialCompany.trim()}.`
+            : `Empresa criada. Peça para ${trialEmail.trim()} criar a conta no NOX4 com esse mesmo e-mail: o acesso de Proprietário é liberado no primeiro login.`,
+      });
+      setTrialEmail('');
+      setTrialCompany('');
+      setTrialDocument('');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String((err as { message?: string })?.message || err);
+      setTrialMessage({
+        type: 'error',
+        text: /admin_grant_test_access|schema cache|function/i.test(msg)
+          ? 'A função de acesso de teste ainda não foi instalada no banco (migração 20261124090000_acesso_teste.sql).'
+          : msg || 'Não foi possível liberar o acesso.',
+      });
+    } finally {
+      setTrialLoading(false);
+    }
+  };
+
   const filteredCompanies = allCompanies.filter(
     (c) =>
       c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -145,6 +191,96 @@ export const SystemAdminPanel: React.FC<SystemAdminPanelProps> = ({
           <p className="text-2xl font-bold text-white">{adminStats.totalInvitations || '—'}</p>
         </div>
       </div>
+
+      {/* Liberar acesso de teste sem cobrança */}
+      <form
+        id="admin-test-access"
+        onSubmit={handleGrantTrial}
+        className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3"
+      >
+        <div>
+          <h3 className="text-sm font-bold text-white">Liberar acesso de teste (sem cobrança)</h3>
+          <p className="text-xs text-slate-400">
+            Cria a empresa do cliente e dá a ele o papel de Proprietário, sem passar pelo checkout. Se o cliente ainda não
+            tem conta, ele só precisa se cadastrar com o mesmo e-mail.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <label className="text-[11px] text-slate-400 space-y-1">
+            <span>E-mail do cliente *</span>
+            <input
+              type="email"
+              required
+              value={trialEmail}
+              onChange={(e) => setTrialEmail(e.target.value)}
+              placeholder="cliente@empresa.com.br"
+              className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500"
+            />
+          </label>
+          <label className="text-[11px] text-slate-400 space-y-1">
+            <span>Nome da empresa *</span>
+            <input
+              type="text"
+              required
+              value={trialCompany}
+              onChange={(e) => setTrialCompany(e.target.value)}
+              placeholder="Ex: Padaria Central"
+              className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500"
+            />
+          </label>
+          <label className="text-[11px] text-slate-400 space-y-1">
+            <span>CNPJ / CPF</span>
+            <input
+              type="text"
+              value={trialDocument}
+              onChange={(e) => setTrialDocument(e.target.value)}
+              placeholder="Opcional"
+              className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500"
+            />
+          </label>
+          <label className="text-[11px] text-slate-400 space-y-1">
+            <span>Duração prevista do teste (dias)</span>
+            <input
+              type="number"
+              min={1}
+              max={365}
+              value={trialDays}
+              onChange={(e) => setTrialDays(e.target.value)}
+              className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-purple-500"
+            />
+          </label>
+        </div>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <button
+            type="submit"
+            disabled={trialLoading}
+            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-xs font-semibold cursor-pointer shrink-0"
+          >
+            {trialLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+            <span>{trialLoading ? 'Liberando...' : 'Liberar acesso de teste'}</span>
+          </button>
+          {trialMessage && (
+            <p
+              role="status"
+              className={`text-xs ${trialMessage.type === 'ok' ? 'text-emerald-400' : 'text-rose-400'}`}
+            >
+              {trialMessage.text}{' '}
+              {trialMessage.type === 'ok' && (
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="underline font-semibold cursor-pointer"
+                >
+                  Atualizar lista
+                </button>
+              )}
+            </p>
+          )}
+        </div>
+        <p className="text-[11px] text-slate-500">
+          A duração fica registrada na empresa para controle da equipe; o sistema não bloqueia o acesso sozinho ao fim do prazo.
+        </p>
+      </form>
 
       {/* All Platform Organizations Directory */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
