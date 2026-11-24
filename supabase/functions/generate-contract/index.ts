@@ -157,6 +157,7 @@ Deno.serve(async (req) => {
 
   const html = `
   <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;color:#0F172A;line-height:1.6">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;border-collapse:collapse"><tr><td bgcolor="#050A1A" style="background:#050A1A;padding:20px;text-align:center;border-radius:12px"><img src="https://app.nox4.com.br/email-logo.png" width="90" height="80" alt="NOX4" style="display:inline-block;border:0;outline:none;text-decoration:none"></td></tr></table>
     <h2 style="margin:0 0 12px">Bem-vindo ao NOX4</h2>
     <p>Olá, ${escapeHtml(sub.company_name)}. Seu pagamento foi confirmado e sua assinatura está ativa.</p>
     <table style="border-collapse:collapse;width:100%;font-size:14px;margin:16px 0">
