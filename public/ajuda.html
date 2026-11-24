@@ -1,0 +1,959 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Central de Ajuda NOX4</title>
+<meta name="description" content="Treinamentos, manual completo e suporte do NOX4, o CFO digital para pequenas e médias empresas.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@700;800&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#050A1A;--navy2:#0F172A;--blue:#2563EB;--blue2:#1D4ED8;--ink:#0F172A;--muted:#475569;--line:#E2E8F0;--bg:#F1F5F9;--card:#FFFFFF;--green:#059669}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:Inter,system-ui,sans-serif;color:var(--ink);background:var(--bg);line-height:1.6;font-size:15px}
+a{color:var(--blue)}
+.wrap{max-width:1160px;margin:0 auto;padding:0 20px}
+header.top{background:var(--navy);color:#fff;position:sticky;top:0;z-index:20;border-bottom:1px solid #1E293B}
+header.top .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;height:60px}
+.brand{font-family:Montserrat,sans-serif;font-weight:800;font-size:20px;color:#fff;text-decoration:none;letter-spacing:.5px}
+.brand span{color:#60A5FA;font-weight:700;font-size:13px;margin-left:8px;font-family:Inter,sans-serif;letter-spacing:0}
+.btn{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 16px;border-radius:10px;font-weight:600;font-size:14px;text-decoration:none;white-space:nowrap}
+.btn-blue{background:var(--blue);color:#fff}.btn-blue:hover{background:var(--blue2);color:#fff}
+.btn-ghost{border:1px solid #334155;color:#E2E8F0}.btn-ghost:hover{background:#1E293B;color:#fff}
+.btn-green{background:var(--green);color:#fff}.btn-green:hover{background:#047857;color:#fff}
+.hero{background:linear-gradient(180deg,var(--navy) 0%,var(--navy2) 100%);color:#fff;padding:48px 0 56px}
+.hero h1{font-family:Montserrat,sans-serif;font-size:clamp(26px,5vw,40px);line-height:1.15;margin:0 0 10px}
+.hero p{color:#CBD5E1;margin:0 0 24px;max-width:620px}
+.search{position:relative;max-width:620px}
+.search input{width:100%;height:52px;border-radius:12px;border:1px solid #334155;background:#0B1224;color:#fff;font-size:16px;padding:0 16px 0 44px;outline:none}
+.search input:focus{border-color:var(--blue)}
+.search svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);opacity:.6}
+.search-info{color:#94A3B8;font-size:13px;margin-top:8px;min-height:20px}
+section.block{padding:40px 0}
+.block h2.t{font-family:Montserrat,sans-serif;font-size:24px;margin:0 0 6px}
+.block p.s{color:var(--muted);margin:0 0 22px}
+.trails{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.trail{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px}
+.trail-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.num{width:30px;height:30px;border-radius:8px;background:#DBEAFE;color:var(--blue);font-weight:700;display:flex;align-items:center;justify-content:center}
+.dur{font-size:12px;color:var(--muted)}
+.trail h3{margin:6px 0 4px;font-size:16px}
+.trail p{margin:0 0 10px;color:var(--muted);font-size:14px}
+.trail ol{margin:0;padding-left:18px;font-size:14px}
+.support{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.sup{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:8px}
+.sup h3{margin:0;font-size:16px}.sup p{margin:0;color:var(--muted);font-size:14px;flex:1}
+.sup .btn{align-self:flex-start}
+.docs{display:grid;grid-template-columns:240px minmax(0,1fr);gap:28px;align-items:start}
+.toc{position:sticky;top:76px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;max-height:calc(100vh - 96px);overflow:auto}
+.toc strong{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:6px}
+.toc ul{list-style:none;margin:0;padding:0}
+.toc a{display:block;padding:6px 8px;border-radius:8px;color:var(--ink);text-decoration:none;font-size:14px}
+.toc a:hover{background:#EFF6FF;color:var(--blue)}
+.articles section.level1{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;margin-bottom:16px;scroll-margin-top:76px}
+.articles h2{font-family:Montserrat,sans-serif;font-size:21px;margin:0 0 10px}
+.articles h3{font-size:16px;margin:20px 0 6px;color:var(--blue2)}
+.articles h4{font-size:15px;margin:16px 0 6px}
+.articles code{background:#F1F5F9;border:1px solid var(--line);border-radius:6px;padding:1px 5px;font-size:13px}
+.articles pre{background:#0F172A;color:#E2E8F0;border-radius:10px;padding:12px;overflow:auto;font-size:13px}
+.articles pre code{background:none;border:0;color:inherit;padding:0}
+.tbl{overflow-x:auto;margin:10px 0}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:#F8FAFC;font-weight:600}
+.hidden{display:none!important}
+mark{background:#FEF08A;padding:0 2px;border-radius:3px}
+footer{background:var(--navy);color:#94A3B8;font-size:13px;padding:24px 0;margin-top:24px}
+footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px}
+.wa-float{position:fixed;right:16px;bottom:16px;z-index:30;box-shadow:0 8px 24px rgba(5,150,105,.35)}
+@media (max-width:980px){.trails{grid-template-columns:repeat(2,minmax(0,1fr))}.docs{grid-template-columns:minmax(0,1fr)}.toc{position:static;max-height:none}}
+@media (max-width:640px){.trails,.support{grid-template-columns:minmax(0,1fr)}.articles section.level1{padding:18px 16px}.hide-sm{display:none}.hero{padding:32px 0 40px}}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+<a class="brand" href="#topo">NOX4<span>Central de Ajuda</span></a>
+<div style="display:flex;gap:8px">
+<a class="btn btn-ghost hide-sm" href="#suporte">Suporte</a>
+<a class="btn btn-blue" href="/">Voltar ao sistema</a>
+</div></div></header>
+
+<div class="hero" id="topo"><div class="wrap">
+<h1>Como podemos ajudar?</h1>
+<p>Treinamentos passo a passo, o manual completo de todas as funções e os canais de suporte do NOX4.</p>
+<div class="search">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+<input id="q" type="search" placeholder="Busque por um assunto: importar planilha, pró-labore, DRE..." aria-label="Buscar na central de ajuda" autocomplete="off">
+</div>
+<div class="search-info" id="qinfo" aria-live="polite"></div>
+</div></div>
+
+<main>
+<section class="block" id="treinamentos"><div class="wrap">
+<h2 class="t">Treinamentos</h2>
+<p class="s">Quatro trilhas curtas, na ordem em que você vai usar o sistema. Comece pela trilha 1.</p>
+<div class="trails"><article class="trail"><div class="trail-top"><span class="num">1</span><span class="dur">15 min de leitura</span></div>
+<h3>Primeiros passos</h3><p>Criar a conta, entender a tela e configurar contas bancárias, plano de contas e cadastros.</p><ol><li><a href="#a-primeiro-acesso">Primeiro acesso</a></li><li><a href="#a-configuracao-inicial-em-30-minutos">Configuração inicial em 30 minutos</a></li><li><a href="#a-dashboard-visao-executiva">Dashboard (Visão executiva)</a></li></ol></article><article class="trail"><div class="trail-top"><span class="num">2</span><span class="dur">20 min de leitura</span></div>
+<h3>Lançamentos do dia a dia</h3><p>Lançar receitas e despesas, dar baixa em recebimentos e pagamentos e importar a planilha.</p><ol><li><a href="#a-receitas">Receitas</a></li><li><a href="#a-despesas">Despesas</a></li><li><a href="#a-contas-a-receber-e-contas-a-pagar">Contas a Receber e Contas a Pagar</a></li><li><a href="#a-configuracoes">Configurações</a></li></ol></article><article class="trail"><div class="trail-top"><span class="num">3</span><span class="dur">20 min de leitura</span></div>
+<h3>Ler os números</h3><p>Entender a DRE, o fluxo de caixa e o que cada indicador diz sobre a empresa.</p><ol><li><a href="#a-dre-gerencial">DRE Gerencial</a></li><li><a href="#a-fluxo-de-caixa">Fluxo de Caixa</a></li><li><a href="#a-glossario">Glossário</a></li></ol></article><article class="trail"><div class="trail-top"><span class="num">4</span><span class="dur">15 min de leitura</span></div>
+<h3>Gestão avançada</h3><p>Centros de resultado, orçamento, sócios e pró-labore, equipe e permissões.</p><ol><li><a href="#a-clientes-produtos-e-centros-de-resultado">Clientes, Produtos e Centros de Resultado</a></li><li><a href="#a-orcamento">Orçamento</a></li><li><a href="#a-socios-patrimonio">Sócios &amp; Patrimônio</a></li><li><a href="#a-equipe-e-permissoes">Equipe e permissões</a></li></ol></article></div>
+</div></section>
+
+<section class="block" id="suporte" style="padding-top:0"><div class="wrap">
+<h2 class="t">Suporte</h2>
+<p class="s">Para agilizar o atendimento, informe o nome da empresa, a tela em que está e mande um print.</p>
+<div class="support">
+<div class="sup"><h3>WhatsApp</h3><p>(12) 98175-5988. O jeito mais rápido de tirar dúvidas e resolver problemas.</p><a class="btn btn-green" href="https://wa.me/5512981755988?text=Ol%C3%A1!%20Preciso%20de%20ajuda%20com%20o%20NOX4." target="_blank" rel="noopener">Chamar no WhatsApp</a></div>
+<div class="sup"><h3>E-mail</h3><p>gabrielturibia13@gmail.com. Para assuntos que precisam de anexo ou registro.</p><a class="btn btn-blue" href="mailto:gabrielturibia13@gmail.com?subject=Suporte%20NOX4">Enviar e-mail</a></div>
+<div class="sup"><h3>Treinamento ao vivo</h3><p>Uma conversa por vídeo para configurar o NOX4 junto com você usando os dados da sua empresa.</p><a class="btn btn-blue" href="https://wa.me/5512981755988?text=Ol%C3%A1!%20Quero%20agendar%20um%20treinamento%20do%20NOX4." target="_blank" rel="noopener">Agendar treinamento</a></div>
+</div>
+</div></section>
+
+<section class="block" id="manual" style="padding-top:0"><div class="wrap">
+<h2 class="t">Manual completo</h2>
+<p class="s">Todas as funções do NOX4, tela por tela.</p>
+<div class="docs">
+<nav class="toc" aria-label="Capítulos do manual"><strong>Capítulos</strong><ul><li><a href="#a-como-usar-este-manual">Como usar este manual</a></li>
+<li><a href="#a-primeiro-acesso">1. Primeiro acesso</a></li>
+<li><a href="#a-configuracao-inicial-em-30-minutos">2. Configuração inicial em 30 minutos</a></li>
+<li><a href="#a-dashboard-visao-executiva">3. Dashboard (Visão executiva)</a></li>
+<li><a href="#a-receitas">4. Receitas</a></li>
+<li><a href="#a-despesas">5. Despesas</a></li>
+<li><a href="#a-contas-a-receber-e-contas-a-pagar">6. Contas a Receber e Contas a Pagar</a></li>
+<li><a href="#a-fluxo-de-caixa">7. Fluxo de Caixa</a></li>
+<li><a href="#a-clientes-produtos-e-centros-de-resultado">8. Clientes, Produtos e Centros de Resultado</a></li>
+<li><a href="#a-dre-gerencial">9. DRE Gerencial</a></li>
+<li><a href="#a-orcamento">10. Orçamento</a></li>
+<li><a href="#a-socios-patrimonio">11. Sócios &amp; Patrimônio</a></li>
+<li><a href="#a-equipe-e-permissoes">12. Equipe e permissões</a></li>
+<li><a href="#a-configuracoes">13. Configurações</a></li>
+<li><a href="#a-plano-e-cobranca">14. Plano e Cobrança</a></li>
+<li><a href="#a-rotina-recomendada">15. Rotina recomendada</a></li>
+<li><a href="#a-duvidas-frequentes">16. Dúvidas frequentes</a></li>
+<li><a href="#a-glossario">17. Glossário</a></li>
+<li><a href="#a-suporte">18. Suporte</a></li></ul></nav>
+<div class="articles" id="articles"><section id="a-como-usar-este-manual" class="level1">
+<h2>Como usar este manual</h2>
+<p>Este manual explica, tela por tela, tudo o que você pode fazer no
+NOX4. Ele foi escrito para quem está começando o período de teste e
+quer, em poucos dias, ver a DRE e o fluxo de caixa da própria
+empresa.</p>
+<p>Se você tem pouco tempo, leia nesta ordem:</p>
+<ol type="1">
+<li><strong>Capítulo 1 — Primeiro acesso</strong></li>
+<li><strong>Capítulo 2 — Configuração inicial em 30
+minutos</strong></li>
+<li><strong>Capítulo 4 — Receitas</strong> e <strong>Capítulo 5 —
+Despesas</strong></li>
+<li><strong>Capítulo 9 — DRE Gerencial</strong></li>
+</ol>
+<p>O restante você consulta quando precisar.</p>
+<p><strong>Endereço do sistema:</strong> https://app.nox4.com</p>
+<p><strong>Suporte:</strong> WhatsApp (12) 98175-5988 · e-mail
+gabrielturibia13@gmail.com</p>
+<section id="a-o-que-o-nox4-faz-e-o-que-nao-faz" class="level2">
+<h3>O que o NOX4 faz (e o que não faz)</h3>
+<p>O NOX4 é um sistema de <strong>gestão financeira</strong>: mostra
+quanto a empresa faturou, quanto gastou, qual foi o lucro de verdade e
+quanto dinheiro há no caixa. Ele serve para o dono e o financeiro
+tomarem decisões.</p>
+<p>O NOX4 <strong>não substitui o contador</strong>. Ele não emite nota
+fiscal, não calcula guias de impostos e não faz a contabilidade fiscal.
+Ele organiza a informação gerencial que normalmente fica espalhada em
+planilhas e extratos.</p>
+</section>
+<section id="a-dois-conceitos-que-voce-precisa-entender" class="level2">
+<h3>Dois conceitos que você precisa entender</h3>
+<p><strong>Competência</strong> é o mês em que a receita ou a despesa
+<em>aconteceu</em> (a venda foi feita, o serviço foi prestado, o aluguel
+se refere àquele mês). A <strong>DRE</strong> usa competência.</p>
+<p><strong>Caixa</strong> é o dia em que o dinheiro <em>entrou ou
+saiu</em> da conta. O <strong>Fluxo de Caixa</strong> usa caixa.</p>
+<p>Exemplo: você vendeu R$ 10.000 em novembro, com recebimento em 30
+dias. Na DRE de novembro, a venda aparece como receita. No Fluxo de
+Caixa, o dinheiro só aparece em dezembro, quando for recebido. Por isso
+cada lançamento tem uma data de <strong>competência</strong> e uma data
+de <strong>vencimento/pagamento</strong>.</p>
+</section>
+</section>
+<section id="a-primeiro-acesso" class="level1">
+<h2>1. Primeiro acesso</h2>
+<section id="a-criar-a-sua-conta" class="level2">
+<h3>1.1 Criar a sua conta</h3>
+<ol type="1">
+<li>Acesse <strong>https://app.nox4.com</strong>.</li>
+<li>Clique em <strong>Criar conta</strong> e preencha nome, e-mail e
+senha (mínimo de 6 caracteres).
+<ul>
+<li>Use <strong>o mesmo e-mail</strong> que você informou para a equipe
+NOX4. É por ele que o sistema libera a sua empresa.</li>
+</ul></li>
+<li>O NOX4 envia um <strong>código de verificação</strong> para o seu
+e-mail. Digite o código na tela para confirmar a conta.
+<ul>
+<li>Não chegou? Confira a caixa de spam e as abas
+Promoções/Atualizações.</li>
+</ul></li>
+<li>Faça login com e-mail e senha.</li>
+</ol>
+</section>
+<section id="a-liberacao-da-empresa-no-periodo-de-teste" class="level2">
+<h3>1.2 Liberação da empresa no período de teste</h3>
+<p>No período de teste você <strong>não passa pelo pagamento</strong>. A
+equipe NOX4 cria a sua empresa e libera você como
+<strong>Proprietário</strong>.</p>
+<ul>
+<li>Se, ao entrar, aparecer uma tela dizendo que a conta está ativa mas
+ainda sem empresa, <strong>não contrate plano</strong>. Avise o suporte
+pelo WhatsApp e clique em atualizar depois da confirmação.</li>
+<li>Depois de liberado, você cai direto no
+<strong>Dashboard</strong>.</li>
+</ul>
+</section>
+<section id="a-esqueci-a-senha" class="level2">
+<h3>1.3 Esqueci a senha</h3>
+<p>Na tela de login, clique em <strong>Esqueceu a senha?</strong>,
+informe o e-mail e use o link enviado para criar uma nova senha.</p>
+</section>
+<section id="a-conhecendo-a-tela" class="level2">
+<h3>1.4 Conhecendo a tela</h3>
+<ul>
+<li><strong>Menu lateral (esquerda):</strong> acesso a todas as telas,
+organizadas em <em>Visão Geral</em>, <em>Financeiro</em>, <em>Gestão
+&amp; Operação</em>, <em>Configurações</em> e <em>Ajuda</em>. No
+celular, o menu abre pelo ícone no topo.</li>
+<li><strong>Topo:</strong> nome da tela, botão de <strong>novo
+lançamento</strong> e o seu perfil (foto, dados e sair).</li>
+<li><strong>Empresa atual:</strong> se você tem acesso a mais de uma
+empresa, a troca é feita no seletor da parte de baixo do menu. Todos os
+números da tela passam a ser da empresa escolhida.</li>
+<li><strong>Filtro de mês:</strong> as telas que dependem de período têm
+um seletor de mês próprio.</li>
+</ul>
+</section>
+<section id="a-seu-perfil" class="level2">
+<h3>1.5 Seu perfil</h3>
+<p>Clique no seu nome no topo para trocar a foto, editar seus dados ou
+sair. Em <strong>Configurações</strong> existe a opção de
+<strong>encerrar as sessões em todos os dispositivos</strong>, útil se
+você entrou em um computador que não é seu.</p>
+</section>
+</section>
+<section id="a-configuracao-inicial-em-30-minutos" class="level1">
+<h2>2. Configuração inicial em 30 minutos</h2>
+<p>O Dashboard mostra uma lista de <strong>Primeiros passos para ativar
+o painel</strong>. Siga esta ordem:</p>
+<div class="tbl"><table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Passo</th>
+<th>Onde fazer</th>
+<th>Por que importa</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1. Contas bancárias e saldo inicial</td>
+<td>Fluxo de Caixa</td>
+<td>É a base do saldo em caixa e do runway</td>
+</tr>
+<tr class="even">
+<td>2. Revisar o plano de contas</td>
+<td>Configurações &gt; Plano de contas</td>
+<td>Garante que cada gasto caia no grupo certo da DRE</td>
+</tr>
+<tr class="odd">
+<td>3. Centros de resultado (opcional)</td>
+<td>Centros de Resultado</td>
+<td>Para ver o resultado por loja, filial ou linha de negócio</td>
+</tr>
+<tr class="even">
+<td>4. Clientes e produtos/serviços</td>
+<td>Clientes / Produtos &amp; Serviços</td>
+<td>Permite ver ticket médio, MRR e margem por item</td>
+</tr>
+<tr class="odd">
+<td>5. Sócios</td>
+<td>Sócios &amp; Patrimônio</td>
+<td>Separa pró-labore de distribuição de lucros</td>
+</tr>
+<tr class="even">
+<td>6. Lançar o mês ou importar a planilha</td>
+<td>Receitas, Despesas ou Configurações &gt; Importar</td>
+<td>A partir daqui a DRE e o caixa ganham vida</td>
+</tr>
+<tr class="odd">
+<td>7. Convidar a equipe (opcional)</td>
+<td>Equipe</td>
+<td>Para o financeiro ou o contador acompanhar</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Dica para o teste:</strong> lance pelo menos <strong>um mês
+completo</strong> (todas as receitas e despesas). Com um mês fechado, a
+DRE já mostra a margem real e você consegue comparar com o que achava
+que lucrava.</p>
+</section>
+<section id="a-dashboard-visao-executiva" class="level1">
+<h2>3. Dashboard (Visão executiva)</h2>
+<p>É a primeira tela depois do login. Ela resume o mês selecionado:</p>
+<ul>
+<li><strong>Faturamento Bruto:</strong> soma das receitas do mês
+(competência), antes de impostos e comissões.</li>
+<li><strong>Lucro Bruto:</strong> receita líquida menos os custos
+diretos dos serviços/produtos.</li>
+<li><strong>Lucro Líquido:</strong> o que sobra depois de todas as
+despesas.</li>
+<li><strong>Saldo Total em Caixa:</strong> soma dos saldos das contas
+bancárias.</li>
+<li><strong>Contas a Receber / Contas a Pagar:</strong> valores em
+aberto.</li>
+<li><strong>DRE resumida:</strong> Receita Bruta, Deduções, Receita
+Líquida, Custos dos Serviços (CSP) e Despesas Operacionais. O botão
+<strong>Ver DRE Gerencial</strong> abre a DRE completa.</li>
+<li><strong>Síntese de desempenho:</strong> indicadores como
+<strong>Inadimplência</strong> (quanto do que deveria ter entrado está
+atrasado), <strong>PMR</strong> (prazo médio de recebimento) e o
+<strong>Score Saúde (0–100)</strong>, que combina margem líquida, fôlego
+de caixa e inadimplência.</li>
+</ul>
+<p>Se o Dashboard estiver vazio, é sinal de que ainda faltam os
+primeiros passos do Capítulo 2.</p>
+</section>
+<section id="a-receitas" class="level1">
+<h2>4. Receitas</h2>
+<p>Menu <strong>Financeiro &gt; Receitas</strong>. Aqui ficam todas as
+entradas de dinheiro ligadas à operação: vendas, mensalidades, serviços
+prestados.</p>
+<section id="a-lancar-uma-receita" class="level2">
+<h3>4.1 Lançar uma receita</h3>
+<p>Clique em <strong>Nova Receita</strong> e preencha:</p>
+<div class="tbl"><table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Campo</th>
+<th>O que colocar</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Descrição *</td>
+<td>O que foi vendido. Ex.: “Mensalidade consultoria – cliente X”</td>
+</tr>
+<tr class="even">
+<td>Cliente</td>
+<td>Escolha um cliente cadastrado ou deixe “Cliente avulso”</td>
+</tr>
+<tr class="odd">
+<td>Produto / Serviço</td>
+<td>Escolha um item cadastrado ou “Serviço avulso”</td>
+</tr>
+<tr class="even">
+<td>Categoria (Plano de Contas) *</td>
+<td>Tipo de receita. Ex.: Receita de Serviços Prestados</td>
+</tr>
+<tr class="odd">
+<td>Centro de Resultado</td>
+<td>Loja, filial ou área (opcional)</td>
+</tr>
+<tr class="even">
+<td>Faturamento bruto (R<span
+class="math inline">) * |<em>V</em><em>a</em><em>l</em><em>o</em><em>r</em><em>t</em><em>o</em><em>t</em><em>a</em><em>l</em><em>d</em><em>a</em><em>v</em><em>e</em><em>n</em><em>d</em><em>a</em>||<em>I</em><em>m</em><em>p</em><em>o</em><em>s</em><em>t</em><em>o</em>(</span>)</td>
+<td>Taxas de cartão, descontos etc.</td>
+</tr>
+<tr class="odd">
+<td>Competência (DRE)</td>
+<td>Mês em que a venda aconteceu</td>
+</tr>
+<tr class="even">
+<td>Vencimento</td>
+<td>Data prevista de recebimento</td>
+</tr>
+<tr class="odd">
+<td>Status</td>
+<td>Recebido, A receber, Atrasado ou Cancelado</td>
+</tr>
+<tr class="even">
+<td>Recebido em *</td>
+<td>Data em que o dinheiro entrou (quando o status é Recebido)</td>
+</tr>
+</tbody>
+</table></div>
+<p>O campo <strong>Receita líquida na DRE</strong> é calculado na hora:
+faturamento bruto menos imposto, comissão e outras deduções. A receita
+entra na DRE e no Fluxo de Caixa assim que é salva.</p>
+</section>
+<section id="a-acompanhar-e-editar" class="level2">
+<h3>4.2 Acompanhar e editar</h3>
+<ul>
+<li>Os cartões do topo mostram <strong>Receita Bruta Total</strong>,
+<strong>Deduções Fiscais/Comissões</strong>, <strong>Receita Líquida
+(DRE)</strong> e <strong>Recebido / Em Aberto</strong>.</li>
+<li>Use a busca (descrição, cliente ou produto) e os filtros de status e
+de centro de resultado.</li>
+<li>Na coluna <strong>Ações</strong>: marcar como
+<strong>Recebido</strong>, <strong>Editar</strong> ou
+<strong>Excluir</strong>.</li>
+</ul>
+<p><strong>Boa prática:</strong> lance a venda quando ela acontece, com
+status <em>A receber</em>. Quando o dinheiro cair, use <strong>Marcar
+como Recebido</strong>. Assim a DRE fica certa no mês da venda e o caixa
+fica certo no dia do recebimento.</p>
+</section>
+</section>
+<section id="a-despesas" class="level1">
+<h2>5. Despesas</h2>
+<p>Menu <strong>Financeiro &gt; Despesas</strong>. Tudo o que sai:
+custos, fornecedores, salários, aluguel, anúncios, impostos.</p>
+<section id="a-lancar-uma-despesa" class="level2">
+<h3>5.1 Lançar uma despesa</h3>
+<p>Clique em <strong>Nova Despesa</strong> e preencha:</p>
+<div class="tbl"><table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Campo</th>
+<th>O que colocar</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Descrição *</td>
+<td>Ex.: “Aluguel do escritório”</td>
+</tr>
+<tr class="even">
+<td>Fornecedor / Credor</td>
+<td>Ex.: Imobiliária, Meta Ads</td>
+</tr>
+<tr class="odd">
+<td>Categoria (Plano de Contas) *</td>
+<td>Define em que linha da DRE a despesa aparece</td>
+</tr>
+<tr class="even">
+<td>Centro de Resultado</td>
+<td>Opcional</td>
+</tr>
+<tr class="odd">
+<td>Valor (R$) *</td>
+<td>Valor da despesa</td>
+</tr>
+<tr class="even">
+<td>Natureza: Fixo ou Variável</td>
+<td>Vem da categoria escolhida; altere só se este lançamento for
+exceção</td>
+</tr>
+<tr class="odd">
+<td>Competência</td>
+<td>Mês a que a despesa se refere</td>
+</tr>
+<tr class="even">
+<td>Vencimento</td>
+<td>Data de pagamento prevista</td>
+</tr>
+<tr class="odd">
+<td>Status</td>
+<td>Pago, A pagar, Vencido ou Cancelado</td>
+</tr>
+<tr class="even">
+<td>Pago em *</td>
+<td>Data em que o dinheiro saiu (quando o status é Pago)</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="a-grupos-de-despesa-na-dre" class="level2">
+<h3>5.2 Grupos de despesa na DRE</h3>
+<p>Cada categoria pertence a um grupo, e é o grupo que define onde a
+despesa aparece na DRE:</p>
+<ul>
+<li><strong>Custos dos Serviços (CSP):</strong> custo direto de entregar
+o que você vende (freelancers da entrega, matéria-prima, ferramentas da
+entrega).</li>
+<li><strong>Comerciais &amp; Marketing:</strong> tráfego pago,
+comissões, CRM.</li>
+<li><strong>Administrativas:</strong> pró-labore, salários
+administrativos, contabilidade, aluguel, sistemas de gestão.</li>
+<li><strong>Operacionais:</strong> infraestrutura e demais gastos da
+operação.</li>
+<li><strong>Resultado financeiro:</strong> tarifas bancárias e
+juros.</li>
+<li><strong>Impostos sobre o lucro:</strong> IRPJ e CSLL.</li>
+<li><strong>Movimentação de sócios (fora da DRE):</strong> distribuição
+de lucros e aportes. Esses valores <strong>saem do caixa, mas não
+reduzem o lucro</strong>.</li>
+</ul>
+</section>
+<section id="a-acompanhar" class="level2">
+<h3>5.3 Acompanhar</h3>
+<p>Os cartões mostram <strong>Total Despesas</strong>, <strong>Custos
+Fixos / Variáveis</strong>, <strong>Total Pago</strong> e <strong>A
+Pagar / Pendente</strong>. Filtre por status e por categoria, e use
+<strong>Marcar como Pago</strong> na coluna Ações quando quitar a
+conta.</p>
+</section>
+</section>
+<section id="a-contas-a-receber-e-contas-a-pagar" class="level1">
+<h2>6. Contas a Receber e Contas a Pagar</h2>
+<p>Menus <strong>Financeiro &gt; Contas a Receber</strong> e
+<strong>Contas a Pagar</strong>. Mostram os títulos (receitas e
+despesas) que ainda não foram liquidados, organizados por
+vencimento.</p>
+<ul>
+<li>Abas: <strong>Todos os Títulos</strong>, <strong>A Vencer /
+Pendentes</strong> e <strong>Vencidos (Atrasados)</strong>.</li>
+<li>Cartões: <strong>Volume Total</strong> e <strong>A Vencer (No
+Prazo)</strong>.</li>
+<li>Coluna <strong>Liquidação:</strong> registra o recebimento ou o
+pagamento.</li>
+<li>Botão <strong>Exportar:</strong> baixa a lista para conferência ou
+cobrança.</li>
+</ul>
+<p><strong>Rotina sugerida:</strong> toda segunda-feira, abra
+<em>Vencidos</em> em Contas a Receber e faça a cobrança. Depois, confira
+em Contas a Pagar o que vence na semana.</p>
+</section>
+<section id="a-fluxo-de-caixa" class="level1">
+<h2>7. Fluxo de Caixa</h2>
+<p>Menu <strong>Financeiro &gt; Fluxo de Caixa</strong>. Mostra o
+dinheiro que efetivamente entrou e saiu.</p>
+<section id="a-contas-bancarias-e-saldo-inicial" class="level2">
+<h3>7.1 Contas bancárias e saldo inicial</h3>
+<p>Antes de tudo, cadastre as contas em <strong>Contas bancárias e saldo
+inicial</strong>:</p>
+<ul>
+<li><strong>Nome da conta</strong> * (ex.: Itaú PJ),
+<strong>Banco</strong> e <strong>Saldo inicial (R$)</strong> — o saldo
+do dia em que você começou a usar o NOX4.</li>
+</ul>
+<p>Sem esse passo, o saldo em caixa e o runway ficam errados.</p>
+</section>
+<section id="a-como-ler-o-fluxo" class="level2">
+<h3>7.2 Como ler o fluxo</h3>
+<div class="tbl"><table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Linha</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Saldo Inicial</td>
+<td>Dinheiro em conta no começo do período</td>
+</tr>
+<tr class="even">
+<td>(+) Entradas Operacionais</td>
+<td>Receitas recebidas</td>
+</tr>
+<tr class="odd">
+<td>(−) Saídas Operacionais</td>
+<td>Despesas pagas</td>
+</tr>
+<tr class="even">
+<td>(=) Saldo Operacional</td>
+<td>Quanto a operação gerou ou consumiu de caixa</td>
+</tr>
+<tr class="odd">
+<td>(+/−) Financiamentos/Sócios</td>
+<td>Aportes, empréstimos e distribuição de lucros</td>
+</tr>
+<tr class="even">
+<td>(=) Saldo Final</td>
+<td>Dinheiro em conta no fim do período</td>
+</tr>
+</tbody>
+</table></div>
+<p>Se o saldo operacional é negativo vários meses seguidos, a operação
+está consumindo caixa, mesmo que a DRE mostre lucro. Normalmente isso
+indica prazo de recebimento longo ou inadimplência.</p>
+</section>
+</section>
+<section id="a-clientes-produtos-e-centros-de-resultado" class="level1">
+<h2>8. Clientes, Produtos e Centros de Resultado</h2>
+<section id="a-clientes" class="level2">
+<h3>8.1 Clientes</h3>
+<p>Menu <strong>Gestão &amp; Operação &gt; Clientes</strong>. Clique em
+<strong>Novo Cliente</strong> e informe nome/empresa, CNPJ ou CPF,
+status (Ativo, Cancelado ou Prospect), e-mail, telefone, <strong>Valor
+Mensal (MRR)</strong> e início do contrato.</p>
+<p>Os cartões mostram <strong>Clientes Ativos</strong>, <strong>MRR
+Total da Carteira</strong> e <strong>Ticket Médio por Cliente</strong>.
+Cada cliente exibe a mensalidade e o <strong>faturado
+histórico</strong>.</p>
+</section>
+<section id="a-produtos-servicos" class="level2">
+<h3>8.2 Produtos &amp; Serviços</h3>
+<p>Menu <strong>Produtos &amp; Serviços &gt; Novo Produto /
+Serviço</strong>: nome, descrição, <strong>Preço de Venda</strong>,
+<strong>Custo Direto Estimado</strong>, se é <strong>Recorrente
+(Mensal)</strong> e se está <strong>Ativo</strong>. O sistema calcula a
+<strong>Margem de Contribuição</strong> de cada item, ou seja, quanto
+sobra de cada venda para pagar as despesas fixas.</p>
+</section>
+<section id="a-centros-de-resultado" class="level2">
+<h3>8.3 Centros de Resultado</h3>
+<p>Menu <strong>Centros de Resultado &gt; Novo Centro de
+Resultado</strong>: nome da unidade, código (ex.: CC01) e descrição. Use
+para separar lojas, filiais, linhas de produto ou áreas.</p>
+<p>Cada centro mostra <strong>Receita Líquida acumulada</strong>,
+<strong>Despesas Alocadas</strong> e o <strong>Resultado</strong> da
+unidade. O centro <strong>Geral</strong> é o padrão da empresa e não
+pode ser excluído.</p>
+</section>
+</section>
+<section id="a-dre-gerencial" class="level1">
+<h2>9. DRE Gerencial</h2>
+<p>Menu <strong>Financeiro &gt; DRE Gerencial</strong>. É o coração do
+NOX4: mostra, mês a mês, o caminho da receita bruta até o lucro
+líquido.</p>
+<section id="a-estrutura" class="level2">
+<h3>9.1 Estrutura</h3>
+<ol type="1">
+<li>(+) Receita Bruta</li>
+<li>(−) Deduções (impostos sobre faturamento, taxas, descontos)</li>
+<li>(=) <strong>Receita Líquida</strong> — base 100% da DRE</li>
+<li>(−) Custos dos Serviços Prestados (CSP)</li>
+<li>(=) <strong>Lucro Bruto</strong></li>
+<li>(−) Despesas Comerciais, Administrativas e Operacionais</li>
+<li>(=) <strong>EBITDA / Resultado Operacional</strong></li>
+<li>(+/−) Resultado financeiro, depreciação e impostos sobre o
+lucro</li>
+<li>(=) <strong>Lucro Líquido Final</strong></li>
+</ol>
+<p>Distribuição de lucros e aportes de sócios <strong>não
+entram</strong> na DRE.</p>
+</section>
+<section id="a-recursos-da-tela" class="level2">
+<h3>9.2 Recursos da tela</h3>
+<ul>
+<li><strong>Filtros:</strong> por centro de resultado e por
+cliente.</li>
+<li><strong>Comparar Mês Anterior (MoM):</strong> mostra o valor do mês
+anterior e a variação.</li>
+<li>Coluna <strong>% Rec. Líquida:</strong> quanto cada linha representa
+da receita líquida (análise vertical).</li>
+<li><strong>Exportar CSV</strong> (para Excel/Sheets) e <strong>Imprimir
+/ PDF</strong> (para enviar ao sócio ou ao contador).</li>
+</ul>
+</section>
+<section id="a-perguntas-que-a-dre-responde" class="level2">
+<h3>9.3 Perguntas que a DRE responde</h3>
+<ul>
+<li>Minha margem bruta está caindo? → compare o Lucro Bruto em % com o
+mês anterior.</li>
+<li>Quanto do meu faturamento vai para marketing? → veja o % da linha
+comercial.</li>
+<li>A empresa dá lucro sem contar o meu pró-labore? → o pró-labore
+aparece em despesas administrativas; a distribuição de lucros fica
+fora.</li>
+</ul>
+</section>
+</section>
+<section id="a-orcamento" class="level1">
+<h2>10. Orçamento</h2>
+<p>Menu <strong>Gestão &amp; Operação &gt; Orçamento</strong>. Defina um
+<strong>Teto Orçado (R$)</strong> por categoria da DRE e acompanhe ao
+longo do mês:</p>
+<ul>
+<li><strong>Meta Orçada</strong>, <strong>Gasto Realizado</strong>,
+<strong>Desvio / Saldo</strong> e <strong>Consumo %</strong> por
+categoria.</li>
+<li>Cartões com <strong>Teto Orçado Total</strong>, <strong>Realizado no
+Mês</strong>, <strong>Saldo Orçamentário</strong> e <strong>% Execução
+Orçamentária</strong>.</li>
+</ul>
+<p><strong>Dica:</strong> comece orçando só as três maiores despesas
+variáveis (por exemplo, tráfego pago, freelancers e comissões).</p>
+</section>
+<section id="a-socios-patrimonio" class="level1">
+<h2>11. Sócios &amp; Patrimônio</h2>
+<p>Menu <strong>Gestão &amp; Operação &gt; Sócios &amp;
+Patrimônio</strong>.</p>
+<ul>
+<li><strong>Adicionar Sócio:</strong> nome, cargo, CPF, <strong>% de
+quotas</strong> e <strong>Pró-labore Mensal</strong>.</li>
+<li><strong>Cap Table Consolidado:</strong> participação de cada
+sócio.</li>
+<li><strong>Registrar Distribuição de Lucros:</strong> escolha o sócio,
+o valor e a data da retirada.</li>
+</ul>
+<p>O <strong>pró-labore</strong> é remuneração pelo trabalho e entra na
+DRE como despesa administrativa. A <strong>distribuição de
+lucros</strong> é a divisão do resultado e fica <strong>fora</strong> da
+DRE: ela reduz o caixa, mas não o lucro. Misturar as duas coisas é um
+dos erros mais comuns em pequenas empresas, e o NOX4 separa
+automaticamente.</p>
+</section>
+<section id="a-equipe-e-permissoes" class="level1">
+<h2>12. Equipe e permissões</h2>
+<p>Menu <strong>Gestão &amp; Operação &gt; Equipe</strong>. Só o
+<strong>Proprietário</strong> administra a equipe.</p>
+<div class="tbl"><table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Papel</th>
+<th>O que pode fazer</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Proprietário</td>
+<td>Tudo, inclusive equipe, empresa e plano</td>
+</tr>
+<tr class="even">
+<td>Financeiro</td>
+<td>Lançar, editar e consultar os dados financeiros</td>
+</tr>
+<tr class="odd">
+<td>Visualizador</td>
+<td>Apenas consultar (ideal para sócio investidor ou contador)</td>
+</tr>
+</tbody>
+</table></div>
+<p>Para convidar, clique em <strong>Adicionar usuário</strong>, informe
+o e-mail e o papel. A pessoa cria a conta no NOX4 com <strong>o mesmo
+e-mail</strong> e o acesso é liberado no primeiro login. Convites
+pendentes podem ser cancelados, e usuários podem ser removidos pelos
+ícones da coluna Ações.</p>
+<p>Os dados de cada empresa ficam isolados: um usuário só vê as empresas
+às quais foi convidado.</p>
+</section>
+<section id="a-configuracoes" class="level1">
+<h2>13. Configurações</h2>
+<p>Menu <strong>Configurações</strong>. Está dividido em abas:</p>
+<section id="a-empresas" class="level2">
+<h3>13.1 Empresas</h3>
+<p>Edite os dados da empresa (nome, CNPJ, segmento) e, se tiver mais de
+uma, use <strong>Alternar para esta</strong>. Em <strong>Nova
+Empresa</strong> você cadastra outra empresa ou filial.</p>
+</section>
+<section id="a-plano-de-contas" class="level2">
+<h3>13.2 Plano de contas</h3>
+<p>A empresa já começa com um plano de contas pronto, organizado na
+ordem da DRE. Você pode:</p>
+<ul>
+<li><strong>Nova Conta DRE:</strong> criar uma categoria (escolha o
+grupo e se é fixa ou variável);</li>
+<li><strong>Editar</strong> o nome, o grupo ou a natureza de uma
+conta;</li>
+<li><strong>Excluir</strong> contas que não usa.</li>
+</ul>
+<p><strong>Plano de contas padrão — receitas:</strong> Receita de
+Serviços Prestados · Receita Recorrente (Assinatura / MRR) · Receita de
+Consultorias / Setup · Receita de Venda de Produtos · Outras Receitas
+Operacionais · Receitas Financeiras &amp; Rendimentos.</p>
+<p><strong>Plano de contas padrão — despesas:</strong> Impostos sobre
+Faturamento (Simples/ISS) · Taxas de Meios de Pagamento &amp; Gateway ·
+Descontos Concedidos · Custos Diretos com Prestadores &amp; Freelancers
+· Softwares &amp; Ferramentas Diretas de Entrega · Tráfego Pago (Meta
+Ads &amp; Google Ads) · Comissões Comerciais de Vendas · Ferramentas
+Comerciais &amp; CRM · Pró-labore dos Sócios · Salários &amp; Encargos
+Administrativos · Contabilidade &amp; Assessoria Jurídica · Aluguel,
+Condomínio &amp; Escritório · Assinaturas &amp; Softwares de Gestão ·
+Servidores em Nuvem &amp; Infraestrutura Tech · Tarifas Bancárias &amp;
+Encargos Financeiros · Depreciação &amp; Amortização · IRPJ &amp; CSLL
+(Impostos sobre Lucro) · Distribuição de Lucros / Dividendos aos Sócios
+· Aporte de Capital Social / Empréstimo de Sócios.</p>
+<p><strong>Antes de importar a planilha</strong>, ajuste os nomes das
+contas ao seu negócio. A importação reconhece a categoria pelo nome.</p>
+</section>
+<section id="a-importar-lancamentos-csv-ou-colar-do-excel"
+class="level2">
+<h3>13.3 Importar lançamentos (CSV ou colar do Excel)</h3>
+<ol type="1">
+<li><p>Monte uma linha por lançamento, nesta ordem de colunas, separadas
+por <strong>;</strong> (ou copie as colunas direto do Excel/Google
+Sheets):</p>
+<p><code>Descrição; Valor; Competência; Vencimento; Categoria (opcional); Status (opcional)</code></p></li>
+<li><p>Regras:</p>
+<ul>
+<li><strong>Valor:</strong> formato brasileiro (8.500,00) ou com ponto
+(8500.00).</li>
+<li><strong>Datas:</strong> DD/MM/AAAA ou AAAA-MM-DD.</li>
+<li><strong>Categoria:</strong> o nome exato da conta no plano de
+contas.</li>
+<li><strong>Status:</strong> “pago” ou “recebido”; deixe em branco para
+pendente.</li>
+</ul></li>
+<li><p>Escolha <strong>Importar como Receitas</strong> ou
+<strong>Importar como Despesas</strong> (receitas e despesas são
+importadas separadamente).</p></li>
+<li><p>Cole as linhas na caixa de texto ou use <strong>Ou carregar
+arquivo .csv / .txt</strong>.</p></li>
+<li><p>Clique em <strong>Processar e Atualizar DRE</strong>.</p></li>
+</ol>
+<p>Exemplo de despesas:</p>
+<pre><code>Aluguel novembro; 3.500,00; 01/11/2026; 05/11/2026; Aluguel, Condomínio &amp; Escritório; pago
+Meta Ads; 1.200,00; 01/11/2026; 10/11/2026; Tráfego Pago (Meta Ads &amp; Google Ads); pago
+Contador; 800,00; 01/11/2026; 15/11/2026; Contabilidade &amp; Assessoria Jurídica;</code></pre>
+<p><strong>Dica:</strong> importe primeiro 3 ou 4 linhas para conferir o
+resultado. Se estiver tudo certo, importe o restante.</p>
+</section>
+<section id="a-seguranca" class="level2">
+<h3>13.4 Segurança</h3>
+<p>Mostra o isolamento de dados por empresa e o controle de acesso por
+papéis, e permite <strong>encerrar sessões em todos os
+dispositivos</strong>.</p>
+</section>
+</section>
+<section id="a-plano-e-cobranca" class="level1">
+<h2>14. Plano e Cobrança</h2>
+<p>Menu <strong>Configurações &gt; Plano e Cobrança</strong> (visível só
+para o Proprietário). Mostra o plano, a assinatura, a forma de pagamento
+e o histórico de cobranças.</p>
+<p><strong>Durante o período de teste não há cobrança.</strong> Não é
+preciso cadastrar cartão nem contratar plano. Ao fim do teste, a equipe
+NOX4 apresenta as condições para continuar.</p>
+</section>
+<section id="a-rotina-recomendada" class="level1">
+<h2>15. Rotina recomendada</h2>
+<div class="tbl"><table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Frequência</th>
+<th>O que fazer</th>
+<th>Tempo</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Diária (ou a cada 2 dias)</td>
+<td>Lançar vendas e despesas novas; marcar recebimentos e
+pagamentos</td>
+<td>10 min</td>
+</tr>
+<tr class="even">
+<td>Semanal</td>
+<td>Cobrar os vencidos (Contas a Receber); conferir o que vence em
+Contas a Pagar; conferir o saldo do banco com o do NOX4</td>
+<td>20 min</td>
+</tr>
+<tr class="odd">
+<td>Mensal (até o dia 5)</td>
+<td>Fechar o mês anterior; ler a DRE com o comparativo MoM; conferir o
+orçamento; registrar pró-labore e distribuição de lucros</td>
+<td>1 hora</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section id="a-duvidas-frequentes" class="level1">
+<h2>16. Dúvidas frequentes</h2>
+<p><strong>O NOX4 substitui meu contador?</strong> Não. O NOX4 é
+gerencial: mostra resultado, margem e caixa para você decidir. A
+contabilidade fiscal continua com o contador. Você pode convidá-lo como
+Visualizador.</p>
+<p><strong>Lancei uma venda, mas ela não aparece no caixa.</strong> O
+caixa só mostra o que foi recebido. Confira se o status da receita é
+<em>Recebido</em> e se a data “Recebido em” está preenchida.</p>
+<p><strong>A DRE mostra lucro, mas não tenho dinheiro em conta.</strong>
+Normalmente há recebimentos atrasados (veja Contas a Receber &gt;
+Vencidos), estoque, pagamento adiantado ou distribuição de lucros.
+Compare a DRE com o Fluxo de Caixa do mesmo mês.</p>
+<p><strong>Errei a categoria de um lançamento.</strong> Abra o
+lançamento em Receitas ou Despesas, clique em Editar, troque a categoria
+e salve. A DRE é atualizada na hora.</p>
+<p><strong>Retirei dinheiro da empresa para mim. Onde lanço?</strong> Se
+é o salário mensal combinado, é <strong>pró-labore</strong> (despesa
+administrativa). Se é divisão do lucro, use <strong>Registrar
+Distribuição de Lucros</strong> em Sócios &amp; Patrimônio.</p>
+<p><strong>Posso usar no celular?</strong> Sim. O NOX4 funciona no
+navegador do celular; o menu abre pelo ícone no topo.</p>
+<p><strong>Meus dados ficam separados dos de outras empresas?</strong>
+Sim. Cada empresa é isolada no banco de dados, e cada usuário só vê as
+empresas às quais foi convidado.</p>
+</section>
+<section id="a-glossario" class="level1">
+<h2>17. Glossário</h2>
+<ul>
+<li><strong>CSP (Custo dos Serviços Prestados):</strong> custo direto de
+entregar o que foi vendido.</li>
+<li><strong>Margem de contribuição:</strong> preço de venda menos custos
+e despesas variáveis daquela venda.</li>
+<li><strong>EBITDA:</strong> resultado da operação antes de juros,
+impostos sobre o lucro, depreciação e amortização.</li>
+<li><strong>MRR:</strong> receita recorrente mensal (mensalidades e
+assinaturas).</li>
+<li><strong>Ticket médio:</strong> valor médio faturado por
+cliente.</li>
+<li><strong>PMR / PMP:</strong> prazo médio de recebimento / de
+pagamento, em dias.</li>
+<li><strong>Inadimplência:</strong> parte do que deveria ter sido
+recebido e está atrasada.</li>
+<li><strong>Runway:</strong> quantos meses o caixa atual aguenta pagando
+as despesas no ritmo de hoje.</li>
+<li><strong>MoM (Month over Month):</strong> comparação com o mês
+anterior.</li>
+</ul>
+</section>
+<section id="a-suporte" class="level1">
+<h2>18. Suporte</h2>
+<ul>
+<li><strong>WhatsApp:</strong> (12) 98175-5988 —
+https://wa.me/5512981755988</li>
+<li><strong>E-mail:</strong> gabrielturibia13@gmail.com</li>
+<li><strong>Central de ajuda:</strong> menu <strong>Ajuda &gt; Ajuda e
+Treinamentos</strong>, dentro do sistema.</li>
+</ul>
+<p>Ao pedir ajuda, informe o nome da empresa, a tela em que está e, se
+possível, mande um print. Isso agiliza o atendimento.</p>
+<p><em>NOX4 · Nox4 Assessoria e Consultoria Marketing LTDA · CNPJ
+67.262.346/0001-39</em></p>
+</section>
+</div>
+</div>
+</div></section>
+</main>
+
+<footer><div class="wrap"><span>NOX4 · Nox4 Assessoria e Consultoria Marketing LTDA · CNPJ 67.262.346/0001-39</span><span>Gestão financeira e controladoria para PMEs</span></div></footer>
+<a class="btn btn-green wa-float" href="https://wa.me/5512981755988?text=Ol%C3%A1!%20Preciso%20de%20ajuda%20com%20o%20NOX4." target="_blank" rel="noopener" aria-label="Falar com o suporte no WhatsApp">Suporte</a>
+
+<script>
+(function(){
+  var q=document.getElementById('q'),info=document.getElementById('qinfo');
+  var secs=[].slice.call(document.querySelectorAll('#articles section.level1'));
+  var norm=function(s){return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();};
+  var texts=secs.map(function(s){return norm(s.textContent);});
+  var t;
+  q.addEventListener('input',function(){
+    clearTimeout(t);
+    t=setTimeout(function(){
+      var v=norm(q.value.trim());
+      var n=0;
+      secs.forEach(function(s,i){var ok=!v||texts[i].indexOf(v)>-1;s.classList.toggle('hidden',!ok);if(ok)n++;});
+      if(!v){info.textContent='';return;}
+      if(n){info.innerHTML=n+(n>1?' capítulos encontrados':' capítulo encontrado')+' no manual. <a href="#manual" style="color:#93C5FD">Ver resultados</a>';}
+      else{info.textContent='Nada encontrado. Tente outra palavra ou fale com o suporte.';}
+    },350);
+  });
+})();
+</script>
+</body>
+</html>
