@@ -17,7 +17,7 @@ const html = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Contrato de Licença de Uso — NOX4</title>
-<link rel="icon" href="/favicon.svg">
+<link rel="icon" type="image/png" href="/favicon.png">
 <style>
 :root{--bg:#F8FAFC;--fg:#0F172A;--muted:#475569;--line:#E2E8F0;--accent:#2563EB}
 @media (prefers-color-scheme: dark){:root{--bg:#050A1A;--fg:#E2E8F0;--muted:#94A3B8;--line:#1E293B;--accent:#60A5FA}}
