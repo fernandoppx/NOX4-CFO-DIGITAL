@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { X, TrendingUp, TrendingDown, AlertCircle, Loader2 } from 'lucide-react';
 import { Client, Product, CostCenter, Category, Revenue, Expense, TransactionStatus } from '../../types';
+import { PAYMENT_METHOD_OPTIONS } from '../../lib/paymentMethods';
 import {
   formatCurrency,
   getTodayISO,
@@ -81,6 +82,7 @@ const emptyExpForm = (today: string) => ({
   // Padrão seguro: só sai do caixa quando o usuário confirmar o pagamento
   status: 'pending' as TransactionStatus,
   is_equity_movement: false,
+  payment_method: '',
   notes: '',
 });
 
@@ -275,6 +277,7 @@ export const NewTransactionModal: React.FC<NewTransactionModalProps> = ({
         payment_date: paidDate,
         status: normStatus,
         is_equity_movement: expForm.is_equity_movement || category.group === 'equity',
+        payment_method: expForm.payment_method || undefined,
         notes: expForm.notes,
       });
       if (ok === false) {
@@ -707,6 +710,21 @@ export const NewTransactionModal: React.FC<NewTransactionModalProps> = ({
                 >
                   <option value="FIXED">Fixo</option>
                   <option value="VARIABLE">Variável</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Forma de pagamento</label>
+                <select
+                  value={expForm.payment_method}
+                  onChange={(e) => setExpForm({ ...expForm, payment_method: e.target.value })}
+                  className={`${inputBase} px-2.5 py-1.5 cursor-pointer`}
+                >
+                  <option value="">Não informada</option>
+                  {PAYMENT_METHOD_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>

@@ -14,6 +14,7 @@ import { DREView } from '../../components/dre/DREView';
 import { CashFlowView } from '../../components/cashflow/CashFlowView';
 import { RevenuesView } from '../../components/transactions/RevenuesView';
 import { ExpensesView } from '../../components/transactions/ExpensesView';
+import { ExpenseBreakdownView } from '../../components/analysis/ExpenseBreakdownView';
 import { ReceivablesPayablesView } from '../../components/transactions/ReceivablesPayablesView';
 import { ClientsView } from '../../components/management/ClientsView';
 import { ProductsView } from '../../components/management/ProductsView';
@@ -100,6 +101,7 @@ export const InternalPreviewApp: React.FC<InternalPreviewAppProps> = ({ onExitPr
 
   // Títulos das abas
   const tabTitles: Partial<Record<NavTab, string>> = {
+    expense_breakdown: 'Gastos por Categoria',
     dashboard: 'Painel Geral',
     dre: 'DRE - Demonstração do Resultado',
     cashflow: 'Fluxo de Caixa',
@@ -406,6 +408,16 @@ export const InternalPreviewApp: React.FC<InternalPreviewAppProps> = ({ onExitPr
                 onEditExpense={(exp) => setEditingExpense(exp)}
                 onDeleteExpense={(id) => handleDeleteTransaction(id)}
                 onMarkAsPaid={(id) => handleMarkStatus(id)}
+              />
+            )}
+
+            {currentTab === 'expense_breakdown' && (
+              <ExpenseBreakdownView
+                expenses={expenses}
+                categories={categories}
+                costCenters={costCenters}
+                selectedMonth={selectedMonth}
+                onEditExpense={(exp) => setEditingExpense(exp)}
               />
             )}
 

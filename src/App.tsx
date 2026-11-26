@@ -23,6 +23,7 @@ import { CreateOrganizationOnboarding } from './components/auth/CreateOrganizati
 import { EmailConfirmedView } from './components/auth/EmailConfirmedView';
 import { WaitingOrganizationView } from './components/auth/WaitingOrganizationView';
 import { PlansView } from './components/billing/PlansView';
+import { ExpenseBreakdownView } from './components/analysis/ExpenseBreakdownView';
 import { CheckoutView } from './components/billing/CheckoutView';
 import { SubscriptionProcessingView } from './components/billing/SubscriptionProcessingView';
 import { TeamView } from './components/team/TeamView';
@@ -875,6 +876,7 @@ export default function App() {
     dashboard: 'Dashboard',
     revenues: 'Receitas',
     expenses: 'Despesas',
+    expense_breakdown: 'Gastos por Categoria',
     receivables: 'Contas a Receber',
     payables: 'Contas a Pagar',
     cashflow: 'Fluxo de Caixa',
@@ -2235,6 +2237,16 @@ export default function App() {
               onEditExpense={(exp) => setEditingExpense(exp)}
               onDeleteExpense={handleDeleteExpense}
               onMarkAsPaid={handleMarkAsPaid}
+            />
+          )}
+
+          {currentTab === 'expense_breakdown' && (
+            <ExpenseBreakdownView
+              expenses={companyExpenses}
+              categories={allCategories}
+              costCenters={companyCostCenters}
+              selectedMonth={selectedMonth}
+              onEditExpense={(exp) => setEditingExpense(exp)}
             />
           )}
 
