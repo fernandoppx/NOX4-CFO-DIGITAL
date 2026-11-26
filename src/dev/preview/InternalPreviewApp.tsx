@@ -68,8 +68,6 @@ export const InternalPreviewApp: React.FC<InternalPreviewAppProps> = ({ onExitPr
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
   const [selectedMonth, setSelectedMonth] = useState<string>(PREVIEW_CURRENT_MONTH);
   const [cashFlowViewMode, setCashFlowViewMode] = useState<'daily' | 'monthly'>('daily');
-  const [selectedCostCenterId, setSelectedCostCenterId] = useState<string>('');
-  const [selectedClientId, setSelectedClientId] = useState<string>('');
 
   // Estado local em memória (NUNCA gravado no Supabase)
   const [revenues, setRevenues] = useState<Revenue[]>(PREVIEW_REVENUES);
@@ -127,13 +125,10 @@ export const InternalPreviewApp: React.FC<InternalPreviewAppProps> = ({ onExitPr
       PREVIEW_REVENUE_CATEGORIES,
       PREVIEW_EXPENSE_CATEGORIES,
       selectedMonth,
-      {
-        costCenterId: selectedCostCenterId || undefined,
-        clientId: selectedClientId || undefined,
-      },
+      undefined,
       budgets
     );
-  }, [revenues, expenses, selectedMonth, selectedCostCenterId, selectedClientId, budgets]);
+  }, [revenues, expenses, selectedMonth, budgets]);
 
   const previousDRE = useMemo(() => {
     const [yearStr, monthStr] = selectedMonth.split('-');
@@ -150,13 +145,10 @@ export const InternalPreviewApp: React.FC<InternalPreviewAppProps> = ({ onExitPr
       PREVIEW_REVENUE_CATEGORIES,
       PREVIEW_EXPENSE_CATEGORIES,
       prevMonthFormatted,
-      {
-        costCenterId: selectedCostCenterId || undefined,
-        clientId: selectedClientId || undefined,
-      },
+      undefined,
       budgets
     );
-  }, [revenues, expenses, selectedMonth, selectedCostCenterId, selectedClientId, budgets]);
+  }, [revenues, expenses, selectedMonth, budgets]);
 
   const cashFlowPeriods = useMemo(() => {
     return calculateCashFlow(
@@ -355,13 +347,10 @@ export const InternalPreviewApp: React.FC<InternalPreviewAppProps> = ({ onExitPr
               <DREView
                 currentDRE={currentDRE}
                 previousDRE={previousDRE}
-                costCenters={costCenters}
-                clients={clients}
-                products={products}
-                selectedCostCenterId={selectedCostCenterId}
-                onSelectCostCenter={(id) => setSelectedCostCenterId(id)}
-                selectedClientId={selectedClientId}
-                onSelectClient={(id) => setSelectedClientId(id)}
+                revenues={revenues}
+                expenses={expenses}
+                revenueCategories={PREVIEW_REVENUE_CATEGORIES}
+                expenseCategories={PREVIEW_EXPENSE_CATEGORIES}
                 selectedMonth={selectedMonth}
                 onSelectMonth={(m) => setSelectedMonth(m)}
               />

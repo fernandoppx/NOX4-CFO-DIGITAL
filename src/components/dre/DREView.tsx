@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FileSpreadsheet,
   Download,
@@ -9,24 +9,23 @@ import {
   TrendingDown,
   Info,
   Calendar,
-  Layers,
-  Users,
+  ListTree,
+  Search,
+  X,
   Printer,
 } from 'lucide-react';
-import { DREStatement, DRELineItem, CostCenter, Client, Product } from '../../types';
-import { formatCurrency, formatPercent, downloadCSV } from '../../lib/utils';
+import { DREStatement, DRELineItem, Revenue, Expense, RevenueCategory, ExpenseCategory } from '../../types';
+import { formatCurrency, formatPercent, downloadCSV, EXPENSE_GROUP_LABELS, getGroupLabel } from '../../lib/utils';
+import { isCancelledStatus } from '../../lib/financialEngine';
 import { MonthPickerFilter } from '../common/MonthPickerFilter';
 
 interface DREViewProps {
   currentDRE: DREStatement;
   previousDRE: DREStatement | null;
-  costCenters: CostCenter[];
-  clients: Client[];
-  products: Product[];
-  selectedCostCenterId: string;
-  onSelectCostCenter: (id: string) => void;
-  selectedClientId: string;
-  onSelectClient: (id: string) => void;
+  revenues: Revenue[];
+  expenses: Expense[];
+  revenueCategories: RevenueCategory[];
+  expenseCategories: ExpenseCategory[];
   selectedMonth: string;
   onSelectMonth: (month: string) => void;
 }
@@ -34,13 +33,10 @@ interface DREViewProps {
 export const DREView: React.FC<DREViewProps> = ({
   currentDRE,
   previousDRE,
-  costCenters,
-  clients,
-  products,
-  selectedCostCenterId,
-  onSelectCostCenter,
-  selectedClientId,
-  onSelectClient,
+  revenues,
+  expenses,
+  revenueCategories,
+  expenseCategories,
   selectedMonth,
   onSelectMonth,
 }) => {
@@ -56,11 +52,119 @@ export const DREView: React.FC<DREViewProps> = ({
 
   const [compareWithPrevious, setCompareWithPrevious] = useState(true);
 
+  // ---------- Filtro por Plano de Contas ----------
+  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [accountSearch, setAccountSearch] = useState('');
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+    const close = (ev: MouseEvent) => {
+      if (accountMenuRef.current && !accountMenuRef.current.contains(ev.target as Node)) setAccountMenuOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [accountMenuOpen]);
+
+  type AccountOption = { id: string; name: string; kind: 'revenue' | 'expense'; groupLabel: string };
+
+  const accountOptions = useMemo<AccountOption[]>(() => {
+    const revs: AccountOption[] = revenueCategories
+      .filter((c) => c.active !== false)
+      .map((c) => ({ id: c.id, name: c.name, kind: 'revenue', groupLabel: c.type === 'financial' ? 'Receitas Financeiras' : 'Receitas' }));
+    const exps: AccountOption[] = expenseCategories
+      .filter((c) => c.active !== false)
+      .map((c) => ({ id: c.id, name: c.name, kind: 'expense', groupLabel: EXPENSE_GROUP_LABELS[c.group] || getGroupLabel(c.group) }));
+    return [...revs, ...exps];
+  }, [revenueCategories, expenseCategories]);
+
+  const accountGroups = useMemo(() => {
+    const term = accountSearch.trim().toLowerCase();
+    const map = new Map<string, AccountOption[]>();
+    accountOptions
+      .filter((a) => !term || a.name.toLowerCase().includes(term) || a.groupLabel.toLowerCase().includes(term))
+      .forEach((a) => {
+        if (!map.has(a.groupLabel)) map.set(a.groupLabel, []);
+        map.get(a.groupLabel)!.push(a);
+      });
+    return Array.from(map.entries());
+  }, [accountOptions, accountSearch]);
+
+  const toggleAccount = (id: string) =>
+    setSelectedAccountIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const previousMonth = useMemo(() => {
+    const [y, m] = selectedMonth.split('-').map(Number);
+    const d = new Date(y, m - 2, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }, [selectedMonth]);
+
+  // Mesmas regras da DRE: competência no mês, sem cancelados, sem movimentação patrimonial
+  const accountRows = useMemo(() => {
+    if (selectedAccountIds.length === 0) return [];
+    const sumFor = (opt: AccountOption, month: string) => {
+      if (opt.kind === 'revenue') {
+        const list = revenues.filter(
+          (r) => r.category_id === opt.id && !isCancelledStatus(r.status) && (r.competence_date || '').startsWith(month)
+        );
+        return { amount: list.reduce((s, r) => s + (r.gross_amount || 0), 0), count: list.length, outside: 0 };
+      }
+      const list = expenses.filter(
+        (e) => e.category_id === opt.id && !isCancelledStatus(e.status) && (e.competence_date || '').startsWith(month)
+      );
+      const inDre = list.filter((e) => !e.is_equity_movement);
+      return {
+        amount: inDre.reduce((s, e) => s + (e.amount || 0), 0),
+        count: inDre.length,
+        outside: list.length - inDre.length,
+      };
+    };
+    return selectedAccountIds
+      .map((id) => accountOptions.find((a) => a.id === id))
+      .filter((a): a is AccountOption => !!a)
+      .map((opt) => {
+        const cur = sumFor(opt, selectedMonth);
+        const prev = sumFor(opt, previousMonth);
+        return { ...opt, amount: cur.amount, count: cur.count, outside: cur.outside, previous: prev.amount };
+      });
+  }, [selectedAccountIds, accountOptions, revenues, expenses, selectedMonth, previousMonth]);
+
+  const isAccountMode = accountRows.length > 0;
+  const accountTotals = useMemo(() => {
+    const rev = accountRows.filter((r) => r.kind === 'revenue');
+    const exp = accountRows.filter((r) => r.kind === 'expense');
+    const sum = (list: typeof accountRows, key: 'amount' | 'previous') => list.reduce((s, r) => s + r[key], 0);
+    const onlyExp = rev.length === 0;
+    const onlyRev = exp.length === 0;
+    const current = onlyExp ? sum(exp, 'amount') : onlyRev ? sum(rev, 'amount') : sum(rev, 'amount') - sum(exp, 'amount');
+    const previous = onlyExp ? sum(exp, 'previous') : onlyRev ? sum(rev, 'previous') : sum(rev, 'previous') - sum(exp, 'previous');
+    const label = onlyExp ? 'Total das despesas' : onlyRev ? 'Total das receitas' : 'Receitas − despesas';
+    const outside = accountRows.reduce((s, r) => s + r.outside, 0);
+    const count = accountRows.reduce((s, r) => s + r.count, 0);
+    return { current, previous, label, outside, count };
+  }, [accountRows]);
+
+  const pctOfNet = (v: number) => (currentDRE.net_revenue !== 0 ? formatPercent((v / currentDRE.net_revenue) * 100) : '—');
+  const momText = (cur: number, prev: number) => (prev !== 0 ? `${(((cur - prev) / Math.abs(prev)) * 100).toFixed(1)}%` : '—');
+
   const toggleRow = (id: string) => {
     setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   const handleExportCSV = () => {
+    if (isAccountMode) {
+      const rows: (string | number)[][] = [
+        [`DRE GERENCIAL - ${currentDRE.period} - Contas selecionadas`, '', '', '', '', ''],
+        ['Conta', 'Grupo', 'Valor Atual (R$)', '% Receita Líq.', 'Mês Anterior (R$)', 'Variação MoM'],
+      ];
+      accountRows.forEach((r) => {
+        rows.push([r.name, r.groupLabel, r.amount.toFixed(2), pctOfNet(r.amount), r.previous.toFixed(2), momText(r.amount, r.previous)]);
+      });
+      rows.push([accountTotals.label, '', accountTotals.current.toFixed(2), pctOfNet(accountTotals.current), accountTotals.previous.toFixed(2), momText(accountTotals.current, accountTotals.previous)]);
+      downloadCSV(`DRE_NOX4_${currentDRE.period}_contas.csv`, rows);
+      return;
+    }
     const headers = ['Código', 'Descrição da Conta', 'Valor Atual (R$)', '% Receita Líq.', 'Mês Anterior (R$)', 'Variação MoM'];
     const rows: (string | number)[][] = [
       [`DRE GERENCIAL - ${currentDRE.period}`, '', '', '', '', ''],
@@ -259,38 +363,86 @@ export const DREView: React.FC<DREViewProps> = ({
             variant="minimal"
           />
 
-          {/* Cost Center Filter */}
-          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs">
-            <Layers className="w-3.5 h-3.5 text-slate-500" />
-            <select
-              value={selectedCostCenterId}
-              onChange={(e) => onSelectCostCenter(e.target.value)}
-              className="bg-transparent text-slate-700 outline-none cursor-pointer"
+          {/* Plano de Contas Filter */}
+          <div className="relative" ref={accountMenuRef}>
+            <button
+              type="button"
+              onClick={() => setAccountMenuOpen((o) => !o)}
+              className={`flex items-center gap-1.5 border rounded-lg px-2.5 py-1 text-xs cursor-pointer ${
+                isAccountMode ? 'bg-blue-50 border-blue-300 text-blue-800 font-semibold' : 'bg-slate-50 border-slate-200 text-slate-700'
+              }`}
             >
-              <option value="" className="bg-white">Todos os Centros de Resultado</option>
-              {costCenters.map((cc) => (
-                <option key={cc.id} value={cc.id} className="bg-white">
-                  {cc.name} ({cc.code})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Client Filter */}
-          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs">
-            <Users className="w-3.5 h-3.5 text-slate-500" />
-            <select
-              value={selectedClientId}
-              onChange={(e) => onSelectClient(e.target.value)}
-              className="bg-transparent text-slate-700 outline-none cursor-pointer"
-            >
-              <option value="" className="bg-white">Todos os Clientes</option>
-              {clients.map((cli) => (
-                <option key={cli.id} value={cli.id} className="bg-white">
-                  {cli.name}
-                </option>
-              ))}
-            </select>
+              <ListTree className="w-3.5 h-3.5" />
+              <span>
+                {selectedAccountIds.length === 0
+                  ? 'Todo o Plano de Contas'
+                  : selectedAccountIds.length === 1
+                  ? accountOptions.find((a) => a.id === selectedAccountIds[0])?.name || '1 conta'
+                  : `${selectedAccountIds.length} contas`}
+              </span>
+              <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+            </button>
+            {isAccountMode && (
+              <button
+                type="button"
+                onClick={() => setSelectedAccountIds([])}
+                title="Limpar filtro"
+                className="absolute -right-2 -top-2 bg-white border border-slate-300 rounded-full p-0.5 text-slate-500 hover:text-rose-600 cursor-pointer"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+            {accountMenuOpen && (
+              <div className="absolute z-30 mt-1 w-80 max-w-[90vw] bg-white border border-slate-200 rounded-xl shadow-lg p-2">
+                <div className="flex items-center gap-1.5 border border-slate-200 rounded-lg px-2 py-1.5 mb-2">
+                  <Search className="w-3.5 h-3.5 text-slate-400" />
+                  <input
+                    autoFocus
+                    value={accountSearch}
+                    onChange={(e) => setAccountSearch(e.target.value)}
+                    placeholder="Buscar conta ou grupo"
+                    className="flex-1 text-xs outline-none bg-transparent"
+                  />
+                </div>
+                <div className="max-h-72 overflow-y-auto pr-1">
+                  {accountGroups.length === 0 && (
+                    <p className="text-xs text-slate-500 px-2 py-3">Nenhuma conta encontrada.</p>
+                  )}
+                  {accountGroups.map(([group, items]) => (
+                    <div key={group} className="mb-2">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 py-1">{group}</div>
+                      {items.map((a) => (
+                        <label key={a.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-50 text-xs text-slate-700 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedAccountIds.includes(a.id)}
+                            onChange={() => toggleAccount(a.id)}
+                            className="rounded border-slate-300 text-blue-600 focus:ring-0"
+                          />
+                          <span>{a.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-between items-center border-t border-slate-100 pt-2 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAccountIds([])}
+                    className="text-xs text-slate-500 hover:text-slate-800 cursor-pointer"
+                  >
+                    Limpar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAccountMenuOpen(false)}
+                    className="text-xs font-semibold bg-slate-900 text-white rounded-md px-3 py-1 cursor-pointer"
+                  >
+                    Aplicar
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Compare with previous toggle */}
@@ -306,6 +458,100 @@ export const DREView: React.FC<DREViewProps> = ({
         </div>
       </div>
 
+      {isAccountMode ? (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{accountTotals.label}</div>
+              <div className="text-xl font-bold text-slate-900 font-heading mt-1">{formatCurrency(accountTotals.current)}</div>
+              <div className="text-[11px] text-slate-500 mt-0.5">
+                {accountRows.length} {accountRows.length === 1 ? 'conta' : 'contas'} · {accountTotals.count} {accountTotals.count === 1 ? 'lançamento' : 'lançamentos'}
+              </div>
+            </div>
+            <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">% da Receita Líquida</div>
+              <div className="text-xl font-bold text-blue-600 font-heading mt-1">{pctOfNet(accountTotals.current)}</div>
+              <div className="text-[11px] text-slate-500 mt-0.5">Receita líquida do mês: {formatCurrency(currentDRE.net_revenue)}</div>
+            </div>
+            <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Mês Anterior</div>
+              <div className="text-xl font-bold text-slate-800 font-heading mt-1">{formatCurrency(accountTotals.previous)}</div>
+              <div className="text-[11px] text-slate-500 mt-0.5">Mesmas contas, mês anterior</div>
+            </div>
+            <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Variação MoM</div>
+              <div className="text-xl font-bold text-slate-800 font-heading mt-1">{momText(accountTotals.current, accountTotals.previous)}</div>
+              <div className="text-[11px] text-slate-500 mt-0.5">Comparado ao mês anterior</div>
+            </div>
+          </div>
+
+          {accountTotals.outside > 0 && (
+            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-4 py-3 text-xs">
+              <Info className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>
+                {accountTotals.outside} {accountTotals.outside === 1 ? 'lançamento destas contas é' : 'lançamentos destas contas são'} movimentação
+                patrimonial (sócios ou principal de empréstimo) e não {accountTotals.outside === 1 ? 'entra' : 'entram'} na DRE. Para ver esses valores, use Gastos por Categoria.
+              </span>
+            </div>
+          )}
+
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600 font-heading uppercase tracking-wider">
+                    <th className="py-3.5 px-4 w-2/5">Conta do Plano de Contas</th>
+                    <th className="py-3.5 px-4 text-right">Valor Atual</th>
+                    <th className="py-3.5 px-4 text-right">% Rec. Líquida</th>
+                    {compareWithPrevious && (
+                      <>
+                        <th className="py-3.5 px-4 text-right">Mês Anterior</th>
+                        <th className="py-3.5 px-4 text-right">Variação MoM</th>
+                      </>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {accountRows.map((r) => (
+                    <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50/60 text-sm">
+                      <td className="py-3 px-4">
+                        <div className="text-slate-800 font-medium">{r.name}</div>
+                        <div className="text-[11px] text-slate-400">{r.groupLabel} · {r.count} {r.count === 1 ? 'lançamento' : 'lançamentos'}</div>
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono">
+                        {r.kind === 'expense' ? (
+                          <span className="text-rose-600">({formatCurrency(r.amount)})</span>
+                        ) : (
+                          <span className="text-slate-800">{formatCurrency(r.amount)}</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono text-slate-500">{pctOfNet(r.amount)}</td>
+                      {compareWithPrevious && (
+                        <>
+                          <td className="py-3 px-4 text-right font-mono text-slate-500">{formatCurrency(r.previous)}</td>
+                          <td className="py-3 px-4 text-right font-mono text-slate-500">{momText(r.amount, r.previous)}</td>
+                        </>
+                      )}
+                    </tr>
+                  ))}
+                  <tr className="bg-slate-100 font-bold text-slate-900 text-sm">
+                    <td className="py-3 px-4">{accountTotals.label}</td>
+                    <td className="py-3 px-4 text-right font-mono">{formatCurrency(accountTotals.current)}</td>
+                    <td className="py-3 px-4 text-right font-mono">{pctOfNet(accountTotals.current)}</td>
+                    {compareWithPrevious && (
+                      <>
+                        <td className="py-3 px-4 text-right font-mono">{formatCurrency(accountTotals.previous)}</td>
+                        <td className="py-3 px-4 text-right font-mono">{momText(accountTotals.current, accountTotals.previous)}</td>
+                      </>
+                    )}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
       {/* DRE Summary Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
@@ -370,6 +616,8 @@ export const DREView: React.FC<DREViewProps> = ({
           </table>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 };
