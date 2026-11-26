@@ -76,6 +76,76 @@ const formatDateBR = (dateStr?: string | null): string => {
   return clean;
 };
 
+/** Confere os dígitos verificadores do CNPJ (evita recusa do Asaas por CNPJ inexistente). */
+export function isValidCnpj(value: string): boolean {
+  const n = String(value || '').replace(/\D/g, '');
+  if (n.length !== 14 || /^(\d)\1{13}$/.test(n)) return false;
+  const calc = (len: number) => {
+    const weights = len === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    const sum = weights.reduce((acc, w, i) => acc + Number(n[i]) * w, 0);
+    const r = sum % 11;
+    return r < 2 ? 0 : 11 - r;
+  };
+  return calc(12) === Number(n[12]) && calc(13) === Number(n[13]);
+}
+
+/** Lê a mensagem de erro que a Edge Function devolveu no corpo (ex.: "Sua conta já possui acesso a uma empresa."). */
+async function readFunctionErrorMessage(error: unknown): Promise<string | null> {
+  try {
+    const response = (error as { context?: Response })?.context;
+    if (!response || typeof response.clone !== 'function') return null;
+    const body = await response.clone().json();
+    const message = typeof body?.error === 'string' ? body.error : typeof body?.message === 'string' ? body.message : '';
+    return message.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Estimativa da 1ª cobrança, com a mesma regra da Edge Function asaas-start-checkout:
+ * o primeiro pagamento é proporcional de hoje até a data fixa de renovação do plano.
+ */
+export function estimateFirstCharge(
+  cycleAmount: number,
+  isYearly: boolean,
+  renewalDay?: number | null,
+  renewalMonth?: number | null,
+  now: Date = new Date()
+): { amount: number; renewalDate: Date } | null {
+  if (!(cycleAmount > 0)) return null;
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(now);
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+  const y = get('year');
+  const m = get('month');
+  const d = get('day');
+  const today = Date.UTC(y, m - 1, d);
+  const day = Number(renewalDay || 10);
+  const month = Number(renewalMonth || 1);
+  const dayMs = 86400000;
+  let renewal: number;
+  let previous: number;
+  if (!isYearly) {
+    const thisMonth = Date.UTC(y, m - 1, day);
+    renewal = today < thisMonth ? thisMonth : Date.UTC(y, m, day);
+    const r = new Date(renewal);
+    previous = Date.UTC(r.getUTCFullYear(), r.getUTCMonth() - 1, day);
+  } else {
+    const thisYear = Date.UTC(y, month - 1, day);
+    renewal = today < thisYear ? thisYear : Date.UTC(y + 1, month - 1, day);
+    previous = Date.UTC(new Date(renewal).getUTCFullYear() - 1, month - 1, day);
+  }
+  const cycleDays = Math.round((renewal - previous) / dayMs);
+  const remainingDays = Math.round((renewal - today) / dayMs);
+  if (cycleDays <= 0 || remainingDays <= 0) return null;
+  return {
+    amount: Math.round(cycleAmount * (remainingDays / cycleDays) * 100) / 100,
+    renewalDate: new Date(renewal),
+  };
+}
+
 export const CheckoutView: React.FC<CheckoutViewProps> = ({
   currentUser,
   selectedPlanId: propPlanId,
@@ -199,6 +269,11 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
       return;
     }
 
+    if (!isValidCnpj(cleanCnpj)) {
+      setFormValidationWarning('Informe um CNPJ válido (14 dígitos). Confira os números: o CNPJ digitado não existe.');
+      return;
+    }
+
     if (!contractAccepted) {
       setFormValidationWarning('Para continuar, leia e aceite o Contrato de Licença de Uso do NOX4.');
       return;
@@ -246,7 +321,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
       );
 
       if (error) {
-        setCheckoutErrorMessage(getFriendlyErrorMessage(error, data));
+        // Em respostas 4xx/5xx o supabase-js não preenche `data`: o motivo vem no corpo da resposta.
+        const serverMessage = await readFunctionErrorMessage(error);
+        setCheckoutErrorMessage(serverMessage || getFriendlyErrorMessage(error, data));
         return;
       }
 
@@ -306,6 +383,15 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   const annualMonthlyEquivalent = annualPrice > 0 ? annualPrice / 12 : basePrice;
   // Promoção vigente (ex.: Black Friday). Informativo: o valor cobrado vem da Edge Function.
   const promo = getActivePromo(plan);
+  const cycleAmount = plan
+    ? Number(promo ? promo.price : isYearly ? plan.annual_price ?? 0 : plan.base_price ?? 0)
+    : 0;
+  const firstCharge = plan
+    ? estimateFirstCharge(cycleAmount, Boolean(isYearly), (plan as any).renewal_day, (plan as any).renewal_month)
+    : null;
+  const renewalLabel = firstCharge
+    ? firstCharge.renewalDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', timeZone: 'UTC' })
+    : '';
 
   // 8. VALOR:
   // Mostrar o valor usando: data.plan.basePrice formatado em BRL.
@@ -869,7 +955,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-slate-400">Vencimento</span>
-                            <span className="font-medium text-slate-300">Vencimentos recorrentes no dia 10.</span>
+                            <span className="font-medium text-slate-300">Vencimentos recorrentes no dia {(plan as any).renewal_day || 10}.</span>
                           </div>
                         </>
                       ) : (
@@ -888,7 +974,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-slate-400">Renovação</span>
-                            <span className="font-medium text-slate-300">Renovação anual em 10 de janeiro.</span>
+                            <span className="font-medium text-slate-300">Renovação anual em {renewalLabel || '10 de janeiro'}.</span>
                           </div>
                         </>
                       )}
@@ -982,6 +1068,13 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                           ? 'Cobrança recorrente mensal'
                           : 'Cobrança recorrente anual'}
                       </p>
+                      {firstCharge && firstCharge.amount < cycleAmount && (
+                        <div id="checkout-first-charge" className="mt-2 p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[11px] text-slate-300">
+                          <strong className="text-white">1ª cobrança hoje: {formatCurrencyBRL(firstCharge.amount)}</strong>{' '}
+                          (proporcional de hoje até {renewalLabel}). A partir daí, {formatCurrencyBRL(cycleAmount)}
+                          {isYearly ? '/ano' : '/mês'}. O valor exato aparece na próxima tela, antes do pagamento.
+                        </div>
+                      )}
                     </div>
 
                     {/* Aceite do contrato */}
