@@ -624,8 +624,6 @@ export default function App() {
   };
 
   // Interactive DRE Filter States
-  const [selectedCostCenterId, setSelectedCostCenterId] = useState<string>('');
-  const [selectedClientId, setSelectedClientId] = useState<string>('');
   const [cashFlowViewMode, setCashFlowViewMode] = useState<'daily' | 'weekly' | 'monthly'>('monthly');
 
   // Transaction Modal State
@@ -764,10 +762,7 @@ export default function App() {
       companyRevenueCategories,
       companyExpenseCategories,
       selectedMonth,
-      {
-        costCenterId: selectedCostCenterId || undefined,
-        clientId: selectedClientId || undefined,
-      },
+      undefined,
       companyBudgets
     );
   }, [
@@ -776,8 +771,6 @@ export default function App() {
     companyRevenueCategories,
     companyExpenseCategories,
     selectedMonth,
-    selectedCostCenterId,
-    selectedClientId,
     companyBudgets,
   ]);
 
@@ -795,10 +788,7 @@ export default function App() {
       companyRevenueCategories,
       companyExpenseCategories,
       previousMonthStr,
-      {
-        costCenterId: selectedCostCenterId || undefined,
-        clientId: selectedClientId || undefined,
-      },
+      undefined,
       companyBudgets
     );
   }, [
@@ -807,8 +797,6 @@ export default function App() {
     companyRevenueCategories,
     companyExpenseCategories,
     previousMonthStr,
-    selectedCostCenterId,
-    selectedClientId,
     companyBudgets,
   ]);
 
@@ -2182,13 +2170,10 @@ export default function App() {
             <DREView
               currentDRE={currentDRE}
               previousDRE={previousDRE}
-              costCenters={companyCostCenters}
-              clients={companyClients}
-              products={companyProducts}
-              selectedCostCenterId={selectedCostCenterId}
-              onSelectCostCenter={(id) => setSelectedCostCenterId(id)}
-              selectedClientId={selectedClientId}
-              onSelectClient={(id) => setSelectedClientId(id)}
+              revenues={companyRevenues}
+              expenses={companyExpenses}
+              revenueCategories={companyRevenueCategories}
+              expenseCategories={companyExpenseCategories}
               selectedMonth={selectedMonth}
               onSelectMonth={(m) => setSelectedMonth(m)}
             />
