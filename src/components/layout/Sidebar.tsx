@@ -24,6 +24,7 @@ import {
   LogOut,
   X,
   LifeBuoy,
+  PieChart,
   MessageCircle,
   ExternalLink,
 } from 'lucide-react';
@@ -35,6 +36,7 @@ export type NavTab =
   | 'dashboard'
   | 'revenues'
   | 'expenses'
+  | 'expense_breakdown'
   | 'receivables'
   | 'payables'
   | 'cashflow'
@@ -110,6 +112,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { id: 'revenues' as NavTab, label: 'Receitas', icon: TrendingUp },
         { id: 'expenses' as NavTab, label: 'Despesas', icon: TrendingDown },
+        { id: 'expense_breakdown' as NavTab, label: 'Gastos por Categoria', icon: PieChart },
         { id: 'receivables' as NavTab, label: 'Contas a Receber', icon: ArrowDownLeft },
         { id: 'payables' as NavTab, label: 'Contas a Pagar', icon: ArrowUpRight },
         { id: 'cashflow' as NavTab, label: 'Fluxo de Caixa', icon: Calculator },
