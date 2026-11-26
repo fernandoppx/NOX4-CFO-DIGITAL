@@ -15,6 +15,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { Revenue, Expense, Client, Product, CostCenter, Category, TransactionStatus } from '../../types';
+import { PAYMENT_METHOD_OPTIONS } from '../../lib/paymentMethods';
 import { formatCurrency, getTodayISO, getGroupLabel } from '../../lib/utils';
 import { useEscapeKey } from '../../lib/hooks';
 import { normalizeTransactionStatus } from '../../lib/financialEngine';
@@ -111,6 +112,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     paid_date: todayStr,
     status: 'paid' as TransactionStatus,
     is_equity_movement: false,
+    payment_method: '',
     notes: '',
   });
 
@@ -160,6 +162,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
         paid_date: expense.paid_date || expense.payment_date || expense.competence_date || todayStr,
         status: normStatus,
         is_equity_movement: !!expense.is_equity_movement,
+        payment_method: expense.payment_method || '',
         notes: expense.notes || '',
       });
     }
@@ -280,6 +283,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       payment_date: effectivePaidDate,
       status: normStatus,
       is_equity_movement: expForm.is_equity_movement,
+      payment_method: expForm.payment_method || undefined,
       notes: expForm.notes,
     };
 
@@ -630,6 +634,21 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 </select>
               </div>
 
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Forma de pagamento</label>
+                <select
+                  value={expForm.payment_method}
+                  onChange={(e) => setExpForm({ ...expForm, payment_method: e.target.value })}
+                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 outline-none cursor-pointer"
+                >
+                  <option value="">Não informada</option>
+                  {PAYMENT_METHOD_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">Centro de Resultado</label>
                 <select
