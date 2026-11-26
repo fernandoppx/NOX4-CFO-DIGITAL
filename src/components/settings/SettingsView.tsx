@@ -524,6 +524,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </p>
             </div>
 
+            {(currentUserRole === 'owner' || currentUserRole === 'system_admin') && (
             <button
               onClick={handleOpenCreateCompany}
               className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold font-heading shadow-xs transition-all cursor-pointer"
@@ -531,6 +532,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <Plus className="w-4 h-4" />
               <span>Nova Empresa</span>
             </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">

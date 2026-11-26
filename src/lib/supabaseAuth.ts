@@ -193,6 +193,14 @@ export async function claimPendingInvitations(
   return { claimed: 0 };
 }
 
+/** Erro de regra de negócio ao criar empresa (mensagem pronta para o usuário). */
+export class OrganizationCreationDeniedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'OrganizationCreationDeniedError';
+  }
+}
+
 /**
  * Creates organization via Supabase RPC 'create_organization' with resilient table fallbacks.
  */
@@ -208,6 +216,11 @@ export async function createOrganizationRPC(
     const { data, error } = await supabase.rpc('create_organization', {
       p_name: trimmed,
     });
+
+    // Recusa do banco (ex.: plano sem direito a mais empresas): mostra o motivo e não tenta outro caminho
+    if (error && (error as { code?: string }).code === 'P0001') {
+      throw new OrganizationCreationDeniedError(error.message);
+    }
 
     if (!error && data) {
       if (typeof data === 'string') {
@@ -228,6 +241,7 @@ export async function createOrganizationRPC(
       }
     }
   } catch (rpcErr) {
+    if (rpcErr instanceof OrganizationCreationDeniedError) throw rpcErr;
     console.warn('RPC create_organization indisponível, utilizando inserção direta:', rpcErr);
   }
 
