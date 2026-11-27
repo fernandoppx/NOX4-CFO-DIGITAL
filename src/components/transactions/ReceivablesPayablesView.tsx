@@ -161,6 +161,11 @@ export const ReceivablesPayablesView: React.FC<ReceivablesPayablesViewProps> = (
 
   const rawItems = isReceivables ? receivableItems : payableItems;
 
+  const matchesMonth = (it: { dueDate?: string; competenceDate?: string }) =>
+    monthFilter === 'ALL' ||
+    Boolean(it.dueDate && it.dueDate.startsWith(monthFilter)) ||
+    Boolean(it.competenceDate && it.competenceDate.startsWith(monthFilter));
+
   const items = rawItems.filter((it) => {
     const matchSearch =
       it.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -172,22 +177,20 @@ export const ReceivablesPayablesView: React.FC<ReceivablesPayablesViewProps> = (
       (statusFilter === 'settled' && it.isSettled) ||
       (statusFilter === 'overdue' && it.isOverdue && !it.isSettled);
 
-    const matchMonth =
-      monthFilter === 'ALL' ||
-      (it.dueDate && it.dueDate.startsWith(monthFilter)) ||
-      (it.competenceDate && it.competenceDate.startsWith(monthFilter));
-
-    return matchSearch && matchStatus && matchMonth;
+    return matchSearch && matchStatus && matchesMonth(it);
   });
 
-  const totalAmount = rawItems.reduce((acc, it) => acc + (it.amount || 0), 0);
-  const totalSettled = rawItems
+  // Cartões de resumo seguem o mês/ano selecionado (ou todos os meses)
+  const monthItems = rawItems.filter(matchesMonth);
+
+  const totalAmount = monthItems.reduce((acc, it) => acc + (it.amount || 0), 0);
+  const totalSettled = monthItems
     .filter((it) => it.isSettled)
     .reduce((acc, it) => acc + (it.amount || 0), 0);
-  const totalPending = rawItems
+  const totalPending = monthItems
     .filter((it) => !it.isSettled && !it.isOverdue)
     .reduce((acc, it) => acc + (it.amount || 0), 0);
-  const totalOverdue = rawItems
+  const totalOverdue = monthItems
     .filter((it) => it.isOverdue && !it.isSettled)
     .reduce((acc, it) => acc + (it.amount || 0), 0);
 
