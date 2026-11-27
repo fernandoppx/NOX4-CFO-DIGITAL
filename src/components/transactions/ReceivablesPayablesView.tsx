@@ -14,6 +14,7 @@ import {
   Download,
   Plus,
   Edit2,
+  Trash2,
 } from 'lucide-react';
 import { Revenue, Expense, Client, CostCenter, TransactionStatus } from '../../types';
 import { formatCurrency, formatDate, downloadCSV, getCurrentYearMonth } from '../../lib/utils';
@@ -34,6 +35,8 @@ interface ReceivablesPayablesViewProps {
   onOpenNewTransaction?: () => void;
   onEditReceivable?: (revenue: Revenue) => void;
   onEditPayable?: (expense: Expense) => void;
+  onDeleteReceivable?: (id: string) => Promise<boolean | void> | boolean | void;
+  onDeletePayable?: (id: string) => Promise<boolean | void> | boolean | void;
 }
 
 export const ReceivablesPayablesView: React.FC<ReceivablesPayablesViewProps> = ({
@@ -49,11 +52,15 @@ export const ReceivablesPayablesView: React.FC<ReceivablesPayablesViewProps> = (
   onOpenNewTransaction,
   onEditReceivable,
   onEditPayable,
+  onDeleteReceivable,
+  onDeletePayable,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [monthFilter, setMonthFilter] = useState<string>(selectedMonth || 'ALL');
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<{ id: string; title: string; amount: number } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (selectedMonth) {
@@ -69,6 +76,23 @@ export const ReceivablesPayablesView: React.FC<ReceivablesPayablesViewProps> = (
   };
 
   const isReceivables = type === 'receivables';
+  const onDeleteItem = isReceivables ? onDeleteReceivable : onDeletePayable;
+
+  const handleConfirmDelete = async () => {
+    if (!itemToDelete || !onDeleteItem) return;
+    setIsDeleting(true);
+    try {
+      setFeedbackError(null);
+      await onDeleteItem(itemToDelete.id);
+      setItemToDelete(null);
+    } catch (err) {
+      setFeedbackError(
+        formatFinancialErrorMessage(err, 'delete', isReceivables ? 'revenue' : 'expense')
+      );
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleSafeMarkAsReceived = (id: string) => {
     try {
@@ -459,6 +483,17 @@ export const ReceivablesPayablesView: React.FC<ReceivablesPayablesViewProps> = (
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
                           )}
+
+                          {onDeleteItem && (
+                            <button
+                              title={isReceivables ? 'Excluir Título a Receber' : 'Excluir Conta a Pagar'}
+                              type="button"
+                              onClick={() => setItemToDelete({ id: it.id, title: it.title, amount: it.amount })}
+                              className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -469,6 +504,57 @@ export const ReceivablesPayablesView: React.FC<ReceivablesPayablesViewProps> = (
           </table>
         </div>
       </div>
+
+      {/* Modal de Confirmação de Exclusão */}
+      {itemToDelete && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-800 font-heading">
+                  {isReceivables ? 'Excluir Título a Receber' : 'Excluir Conta a Pagar'}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Esta ação removerá o lançamento selecionado.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1.5">
+              <div className="font-semibold text-slate-800">{itemToDelete.title}</div>
+              <div className="text-slate-600">
+                Valor: <span className="font-bold text-slate-800">{formatCurrency(itemToDelete.amount)}</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600">
+              Deseja realmente excluir este lançamento financeiro? A exclusão não pode ser desfeita e afetará o cálculo de DRE e fluxo de caixa.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setItemToDelete(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting ? 'Excluindo...' : 'Sim, Excluir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
