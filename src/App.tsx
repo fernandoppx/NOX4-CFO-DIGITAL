@@ -2249,6 +2249,8 @@ export default function App() {
               onOpenNewTransaction={() => handleOpenNewTransactionModal('revenue', 'pending')}
               onEditReceivable={(rev) => setEditingRevenue(rev)}
               onEditPayable={(exp) => setEditingExpense(exp)}
+              onDeleteReceivable={handleDeleteRevenue}
+              onDeletePayable={handleDeleteExpense}
             />
           )}
 
@@ -2266,6 +2268,8 @@ export default function App() {
               onOpenNewTransaction={() => handleOpenNewTransactionModal('expense', 'pending')}
               onEditReceivable={(rev) => setEditingRevenue(rev)}
               onEditPayable={(exp) => setEditingExpense(exp)}
+              onDeleteReceivable={handleDeleteRevenue}
+              onDeletePayable={handleDeleteExpense}
             />
           )}
 
